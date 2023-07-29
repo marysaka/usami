@@ -1,12 +1,13 @@
 use std::{
     borrow::Cow,
-    ffi::{c_char, CStr, CString},
+    ffi::{c_char, c_void, CStr, CString},
     mem::MaybeUninit,
 };
 
 use ash::{
     extensions::ext::DebugUtils,
     prelude::*,
+    util::Align,
     vk::{
         self, AccessFlags, Buffer, BufferCreateFlags, BufferCreateInfo, BufferImageCopy,
         BufferUsageFlags, CommandBuffer, CommandBufferAllocateInfo, CommandBufferLevel,
@@ -371,6 +372,36 @@ impl UsamiDevice {
             .device_memory
             .read_to_vec()
     }
+
+    pub fn create_buffer<T: Copy>(
+        &self,
+        _name: String,
+        flags: BufferCreateFlags,
+        queue_family_indices: &[u32],
+        sharing_mode: SharingMode,
+        usage: BufferUsageFlags,
+        data: &[T],
+    ) -> VkResult<UsamiBuffer> {
+        let create_info = BufferCreateInfo::builder()
+            .flags(flags)
+            .queue_family_indices(queue_family_indices)
+            .sharing_mode(sharing_mode)
+            .usage(usage)
+            .size(std::mem::size_of_val(data) as u64)
+            .build();
+        let buffer = UsamiBuffer::new(self, create_info, MemoryPropertyFlags::HOST_VISIBLE)?;
+
+        unsafe {
+            let dst_slice =
+                std::slice::from_raw_parts_mut(buffer.device_memory.map()? as *mut T, data.len());
+
+            dst_slice.copy_from_slice(data);
+
+            buffer.device_memory.unmap();
+        }
+
+        Ok(buffer)
+    }
 }
 
 impl Drop for UsamiDevice {
@@ -419,21 +450,32 @@ impl UsamiDeviceMemory {
         })
     }
 
+    pub unsafe fn map(&self) -> VkResult<*mut c_void> {
+        self.device.map_memory(
+            self.handle,
+            0,
+            self.allocate_info.allocation_size,
+            MemoryMapFlags::empty(),
+        )
+    }
+
+    pub unsafe fn unmap(&self) {
+        self.device.unmap_memory(self.handle)
+    }
+
     pub fn read_to_vec(&self) -> VkResult<Vec<u8>> {
         let mut res = Vec::new();
 
-        let allocation_size = self.allocate_info.allocation_size;
+        let allocation_size = self.allocate_info.allocation_size as usize;
 
-        res.resize(allocation_size as usize, 0);
+        res.resize(allocation_size, 0);
 
         unsafe {
-            let ptr =
-                self.device
-                    .map_memory(self.handle, 0, allocation_size, MemoryMapFlags::empty())?;
+            let ptr = self.map()?;
 
-            std::ptr::copy(ptr, res.as_mut_ptr() as *mut _, allocation_size as usize);
+            std::ptr::copy(ptr, res.as_mut_ptr() as *mut _, allocation_size);
 
-            self.device.unmap_memory(self.handle);
+            self.unmap();
         }
 
         Ok(res)
