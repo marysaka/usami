@@ -1,3 +1,5 @@
+pub mod utils;
+
 use std::{
     borrow::Cow,
     ffi::{c_char, c_void, CStr, CString},
@@ -17,7 +19,8 @@ use ash::{
         ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryAllocateInfo,
         MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements, Offset3D, PhysicalDevice,
         PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties,
-        PipelineStageFlags, Queue, SampleCountFlags, SharingMode,
+        PipelineStageFlags, Queue, SampleCountFlags, ShaderModule, ShaderModuleCreateFlags,
+        ShaderModuleCreateInfo, SharingMode,
     },
     Device, Entry,
 };
@@ -402,6 +405,10 @@ impl UsamiDevice {
 
         Ok(buffer)
     }
+
+    pub fn create_shader(&self, _name: String, code: &[u32]) -> VkResult<UsamiShader> {
+        UsamiShader::new(self, code)
+    }
 }
 
 impl Drop for UsamiDevice {
@@ -561,6 +568,30 @@ impl UsamiBuffer {
 impl Drop for UsamiBuffer {
     fn drop(&mut self) {
         unsafe { self.device.destroy_buffer(self.handle, None) }
+    }
+}
+
+pub struct UsamiShader {
+    device: Device,
+    pub handle: ShaderModule,
+}
+
+impl UsamiShader {
+    pub fn new(device: &UsamiDevice, code: &[u32]) -> VkResult<Self> {
+        let create_info = ShaderModuleCreateInfo::builder().code(code).build();
+
+        let handle = unsafe { device.vk_device.create_shader_module(&create_info, None)? };
+
+        Ok(Self {
+            device: device.vk_device.clone(),
+            handle,
+        })
+    }
+}
+
+impl Drop for UsamiShader {
+    fn drop(&mut self) {
+        unsafe { self.device.destroy_shader_module(self.handle, None) }
     }
 }
 
