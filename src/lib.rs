@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     ffi::{c_char, CStr, CString},
+    mem::MaybeUninit,
 };
 
 use ash::{
@@ -8,16 +9,16 @@ use ash::{
     prelude::*,
     vk::{
         self, AccessFlags, Buffer, BufferCreateFlags, BufferCreateInfo, BufferImageCopy,
-        BufferUsageFlags, CommandBuffer, CommandBufferAllocateInfo, CommandBufferBeginInfo,
-        CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags,
-        CommandPoolCreateInfo, DependencyFlags, DeviceMemory, DeviceQueueCreateInfo,
-        DeviceQueueCreateInfoBuilder, Format, Image, ImageAspectFlags, ImageLayout,
+        BufferUsageFlags, CommandBuffer, CommandBufferAllocateInfo, CommandBufferLevel,
+        CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, DeviceMemory,
+        DeviceQueueCreateInfo, Format, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout,
         ImageMemoryBarrier, ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType,
         ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryAllocateInfo,
-        MemoryBarrier, MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements, Offset3D,
+        MemoryMapFlags, MemoryPropertyFlags, MemoryRequirements, Offset3D, PhysicalDevice,
+        PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties,
         PipelineStageFlags, Queue, SampleCountFlags, SharingMode,
     },
-    Entry,
+    Device, Entry,
 };
 
 pub struct UsamiInstance {
@@ -131,18 +132,20 @@ impl Drop for UsamiInstance {
 pub struct UsamiDevice {
     pub width: u32,
     pub height: u32,
+
     pub instance: UsamiInstance,
+    pub physical_device: PhysicalDevice,
+    pub physical_device_properties: PhysicalDeviceProperties,
+    pub physical_device_features: PhysicalDeviceFeatures,
+    pub physical_device_memory_properties: PhysicalDeviceMemoryProperties,
     pub vk_device: ash::Device,
     pub vk_command_pool: CommandPool,
     pub vk_command_buffer: CommandBuffer,
     pub vk_queue_index: u32,
     pub vk_queue: Queue,
-    pub presentation_image: Image,
-    pub presentation_image_req: MemoryRequirements,
-    pub presentation_image_allocation: DeviceMemory,
-    pub presentation_image_view: ImageView,
-    pub presentation_buffer_readback: Buffer,
-    pub presentation_buffer_readback_allocation: DeviceMemory,
+    pub presentation_image: MaybeUninit<UsamiImage>,
+    pub presentation_image_view: MaybeUninit<ImageView>,
+    pub presentation_buffer_readback: MaybeUninit<UsamiBuffer>,
 }
 
 impl UsamiDevice {
@@ -167,23 +170,27 @@ impl UsamiDevice {
             )>,
         >,
     ) -> VkResult<Self> {
-        let (physical_device, prop, feat, queues) =
-            unsafe { instance.vk_instance.enumerate_physical_devices()? }
-                .iter()
-                .map(|x| {
-                    let prop = unsafe { instance.vk_instance.get_physical_device_properties(*x) };
-                    let feat = unsafe { instance.vk_instance.get_physical_device_features(*x) };
-                    let queues = unsafe {
-                        instance
-                            .vk_instance
-                            .get_physical_device_queue_family_properties(*x)
-                    };
-                    (*x, prop, feat, queues)
-                })
-                .find_map(should_grab)
-                .expect("Cannot find a device that match requirement!");
+        let (
+            physical_device,
+            physical_device_properties,
+            physical_device_features,
+            queue_familiy_properties,
+        ) = unsafe { instance.vk_instance.enumerate_physical_devices()? }
+            .iter()
+            .map(|x| {
+                let prop = unsafe { instance.vk_instance.get_physical_device_properties(*x) };
+                let feat = unsafe { instance.vk_instance.get_physical_device_features(*x) };
+                let queues = unsafe {
+                    instance
+                        .vk_instance
+                        .get_physical_device_queue_family_properties(*x)
+                };
+                (*x, prop, feat, queues)
+            })
+            .find_map(should_grab)
+            .expect("Cannot find a device that match requirement!");
 
-        let vk_queue_index = queues
+        let vk_queue_index = queue_familiy_properties
             .iter()
             .enumerate()
             .find_map(|(i, x)| {
@@ -228,96 +235,6 @@ impl UsamiDevice {
                 .get_physical_device_memory_properties(physical_device)
         };
 
-        let presentation_image_info = vk::ImageCreateInfo::builder()
-            .image_type(ImageType::TYPE_2D)
-            .format(Format::R8G8B8A8_UNORM)
-            .extent(vk::Extent3D {
-                width,
-                height,
-                depth: 1,
-            })
-            .mip_levels(1)
-            .array_layers(1)
-            .samples(SampleCountFlags::TYPE_1)
-            .tiling(ImageTiling::LINEAR)
-            .usage(
-                ImageUsageFlags::COLOR_ATTACHMENT
-                    | ImageUsageFlags::SAMPLED
-                    | ImageUsageFlags::TRANSFER_DST
-                    | ImageUsageFlags::TRANSFER_SRC,
-            )
-            .build();
-
-        let presentation_image = unsafe { vk_device.create_image(&presentation_image_info, None)? };
-        let presentation_image_req =
-            unsafe { vk_device.get_image_memory_requirements(presentation_image) };
-        let presentation_image_allocation_info = MemoryAllocateInfo::builder()
-            .allocation_size(presentation_image_req.size)
-            .memory_type_index(
-                Self::find_memory_type_index(
-                    &presentation_image_req,
-                    &physical_device_memory_properties,
-                    MemoryPropertyFlags::HOST_VISIBLE,
-                )
-                .expect("cannot find memory type for presentation image"),
-            )
-            .build();
-        let presentation_image_allocation =
-            unsafe { vk_device.allocate_memory(&presentation_image_allocation_info, None)? };
-        unsafe {
-            vk_device.bind_image_memory(presentation_image, presentation_image_allocation, 0)?;
-        }
-        let presentation_image_view = unsafe {
-            vk_device.create_image_view(
-                &ImageViewCreateInfo::builder()
-                    .view_type(ImageViewType::TYPE_2D)
-                    .format(Format::R8G8B8A8_UNORM)
-                    .image(presentation_image)
-                    .subresource_range(
-                        ImageSubresourceRange::builder()
-                            .aspect_mask(ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .build(),
-                None,
-            )?
-        };
-
-        let presentation_buffer_readback_allocation = unsafe {
-            vk_device.allocate_memory(
-                &MemoryAllocateInfo::builder()
-                    .allocation_size(u64::from(width * height * 4))
-                    .memory_type_index(presentation_image_allocation_info.memory_type_index)
-                    .build(),
-                None,
-            )?
-        };
-
-        let presentation_buffer_readback = unsafe {
-            vk_device.create_buffer(
-                &BufferCreateInfo::builder()
-                    .flags(BufferCreateFlags::empty())
-                    .sharing_mode(SharingMode::EXCLUSIVE)
-                    .usage(BufferUsageFlags::TRANSFER_DST)
-                    .queue_family_indices(&[vk_queue_index])
-                    .size(u64::from(width * height * 4))
-                    .build(),
-                None,
-            )?
-        };
-
-        unsafe {
-            vk_device.bind_buffer_memory(
-                presentation_buffer_readback,
-                presentation_buffer_readback_allocation,
-                0,
-            )?;
-        }
-
         let vk_queue = unsafe { vk_device.get_device_queue(vk_queue_index, 0) };
 
         let vk_command_pool = unsafe {
@@ -339,69 +256,120 @@ impl UsamiDevice {
             )?[0]
         };
 
-        Ok(Self {
+        let mut result = Self {
             width,
             height,
             instance,
+            physical_device,
+            physical_device_properties,
+            physical_device_features,
+            physical_device_memory_properties,
             vk_device,
             vk_queue_index,
             vk_queue,
             vk_command_pool,
             vk_command_buffer,
-            presentation_image,
-            presentation_image_req,
-            presentation_image_allocation,
-            presentation_image_view,
-            presentation_buffer_readback,
-            presentation_buffer_readback_allocation,
-        })
+            presentation_image: MaybeUninit::uninit(),
+            presentation_image_view: MaybeUninit::uninit(),
+            presentation_buffer_readback: MaybeUninit::uninit(),
+        };
+
+        let vk_device = &result.vk_device;
+
+        let presentation_image_info = vk::ImageCreateInfo::builder()
+            .image_type(ImageType::TYPE_2D)
+            .format(Format::R8G8B8A8_UNORM)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(SampleCountFlags::TYPE_1)
+            .tiling(ImageTiling::LINEAR)
+            .usage(
+                ImageUsageFlags::COLOR_ATTACHMENT
+                    | ImageUsageFlags::SAMPLED
+                    | ImageUsageFlags::TRANSFER_DST
+                    | ImageUsageFlags::TRANSFER_SRC,
+            )
+            .build();
+
+        result.presentation_image.write(UsamiImage::new(
+            &result,
+            presentation_image_info,
+            MemoryPropertyFlags::HOST_VISIBLE,
+        )?);
+        let presentation_image_view = unsafe {
+            vk_device.create_image_view(
+                &ImageViewCreateInfo::builder()
+                    .view_type(ImageViewType::TYPE_2D)
+                    .format(Format::R8G8B8A8_UNORM)
+                    .image(result.presentation_image().handle)
+                    .subresource_range(
+                        ImageSubresourceRange::builder()
+                            .aspect_mask(ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1)
+                            .build(),
+                    )
+                    .build(),
+                None,
+            )?
+        };
+        result
+            .presentation_image_view
+            .write(presentation_image_view);
+
+        let presentation_buffer_readback_info = BufferCreateInfo::builder()
+            .flags(BufferCreateFlags::empty())
+            .sharing_mode(SharingMode::EXCLUSIVE)
+            .usage(BufferUsageFlags::TRANSFER_DST)
+            .queue_family_indices(&[vk_queue_index])
+            .size(u64::from(width * height * 4))
+            .build();
+
+        result.presentation_buffer_readback.write(UsamiBuffer::new(
+            &result,
+            presentation_buffer_readback_info,
+            MemoryPropertyFlags::HOST_VISIBLE,
+        )?);
+
+        Ok(result)
     }
 
-    pub fn find_memory_type_index(
-        memory_req: &vk::MemoryRequirements,
-        memory_prop: &vk::PhysicalDeviceMemoryProperties,
-        flags: vk::MemoryPropertyFlags,
-    ) -> Option<u32> {
-        memory_prop.memory_types[..memory_prop.memory_type_count as _]
+    pub fn presentation_image(&self) -> &UsamiImage {
+        unsafe { self.presentation_image.assume_init_ref() }
+    }
+
+    pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
+        unsafe { self.presentation_buffer_readback.assume_init_ref() }
+    }
+
+    pub fn find_memory_type(
+        &self,
+        req: &MemoryRequirements,
+        flags: MemoryPropertyFlags,
+    ) -> VkResult<u32> {
+        self.physical_device_memory_properties.memory_types
+            [..self.physical_device_memory_properties.memory_type_count as _]
             .iter()
             .enumerate()
             .find(|(index, memory_type)| {
-                (1 << index) & memory_req.memory_type_bits != 0
+                (1 << index) & req.memory_type_bits != 0
                     && memory_type.property_flags & flags == flags
             })
             .map(|(index, _memory_type)| index as _)
+            .ok_or(vk::Result::ERROR_UNKNOWN) // TODO better error management
     }
 
     pub fn read_image_memory(&self) -> VkResult<Vec<u8>> {
-        let mut res = Vec::new();
-
-        let image_subresource_range = ImageSubresourceRange::builder()
-            .base_array_layer(0)
-            .layer_count(1)
-            .base_mip_level(0)
-            .level_count(1)
-            .aspect_mask(ImageAspectFlags::COLOR)
-            .build();
-
-        let image_size = self.width * self.height * 4;
-
-        res.resize(image_size as usize, 0);
-
-        unsafe {
-            let ptr = self.vk_device.map_memory(
-                self.presentation_buffer_readback_allocation,
-                0,
-                u64::from(image_size),
-                MemoryMapFlags::empty(),
-            )?;
-
-            std::ptr::copy(ptr, res.as_mut_ptr() as *mut _, image_size as usize);
-
-            self.vk_device
-                .unmap_memory(self.presentation_buffer_readback_allocation);
-        }
-
-        Ok(res)
+        self.presentation_buffer_readback()
+            .device_memory
+            .read_to_vec()
     }
 }
 
@@ -409,20 +377,148 @@ impl Drop for UsamiDevice {
     fn drop(&mut self) {
         unsafe {
             self.vk_device
-                .destroy_buffer(self.presentation_buffer_readback, None);
-            self.vk_device
-                .free_memory(self.presentation_buffer_readback_allocation, None);
-            self.vk_device
                 .free_command_buffers(self.vk_command_pool, &[self.vk_command_buffer]);
             self.vk_device
                 .destroy_command_pool(self.vk_command_pool, None);
             self.vk_device
-                .destroy_image_view(self.presentation_image_view, None);
-            self.vk_device.destroy_image(self.presentation_image, None);
-            self.vk_device
-                .free_memory(self.presentation_image_allocation, None);
+                .destroy_image_view(self.presentation_image_view.assume_init(), None);
+
+            self.presentation_buffer_readback.assume_init_drop();
+            self.presentation_image.assume_init_drop();
             self.vk_device.destroy_device(None);
         }
+    }
+}
+
+pub struct UsamiDeviceMemory {
+    // TODO: Arc
+    device: Device,
+    pub requirements: MemoryRequirements,
+    pub allocate_info: MemoryAllocateInfo,
+    pub handle: DeviceMemory,
+}
+
+impl UsamiDeviceMemory {
+    pub fn new(
+        device: &UsamiDevice,
+        requirements: MemoryRequirements,
+        flags: MemoryPropertyFlags,
+    ) -> VkResult<Self> {
+        let allocate_info = MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(device.find_memory_type(&requirements, flags)?)
+            .build();
+
+        let handle = unsafe { device.vk_device.allocate_memory(&allocate_info, None)? };
+
+        Ok(Self {
+            device: device.vk_device.clone(),
+            requirements,
+            allocate_info,
+            handle,
+        })
+    }
+
+    pub fn read_to_vec(&self) -> VkResult<Vec<u8>> {
+        let mut res = Vec::new();
+
+        let allocation_size = self.allocate_info.allocation_size;
+
+        res.resize(allocation_size as usize, 0);
+
+        unsafe {
+            let ptr =
+                self.device
+                    .map_memory(self.handle, 0, allocation_size, MemoryMapFlags::empty())?;
+
+            std::ptr::copy(ptr, res.as_mut_ptr() as *mut _, allocation_size as usize);
+
+            self.device.unmap_memory(self.handle);
+        }
+
+        Ok(res)
+    }
+}
+
+impl Drop for UsamiDeviceMemory {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.free_memory(self.handle, None);
+        }
+    }
+}
+
+pub struct UsamiImage {
+    device: Device,
+    pub create_info: ImageCreateInfo,
+    pub handle: Image,
+    pub device_memory: UsamiDeviceMemory,
+}
+
+impl UsamiImage {
+    pub fn new(
+        device: &UsamiDevice,
+        create_info: ImageCreateInfo,
+        memory_flags: MemoryPropertyFlags,
+    ) -> VkResult<Self> {
+        let vk_device: &Device = &device.vk_device;
+
+        let handle = unsafe { vk_device.create_image(&create_info, None)? };
+        let req = unsafe { vk_device.get_image_memory_requirements(handle) };
+        let device_memory = UsamiDeviceMemory::new(device, req, memory_flags)?;
+        unsafe {
+            vk_device.bind_image_memory(handle, device_memory.handle, 0)?;
+        }
+
+        Ok(Self {
+            device: device.vk_device.clone(),
+            create_info,
+            handle,
+            device_memory,
+        })
+    }
+}
+
+impl Drop for UsamiImage {
+    fn drop(&mut self) {
+        unsafe { self.device.destroy_image(self.handle, None) }
+    }
+}
+
+pub struct UsamiBuffer {
+    device: Device,
+    pub create_info: BufferCreateInfo,
+    pub handle: Buffer,
+    pub device_memory: UsamiDeviceMemory,
+}
+
+impl UsamiBuffer {
+    pub fn new(
+        device: &UsamiDevice,
+        create_info: BufferCreateInfo,
+        memory_flags: MemoryPropertyFlags,
+    ) -> VkResult<Self> {
+        let vk_device: &Device = &device.vk_device;
+
+        let handle = unsafe { vk_device.create_buffer(&create_info, None)? };
+        let req = unsafe { vk_device.get_buffer_memory_requirements(handle) };
+        let device_memory = UsamiDeviceMemory::new(device, req, memory_flags)?;
+        unsafe {
+            vk_device.bind_buffer_memory(handle, device_memory.handle, 0)?;
+        }
+
+        Ok(Self {
+            device: device.vk_device.clone(),
+            create_info,
+            handle,
+            device_memory,
+        })
+    }
+}
+
+impl Drop for UsamiBuffer {
+    fn drop(&mut self) {
+        unsafe { self.device.destroy_buffer(self.handle, None) }
     }
 }
 
@@ -475,9 +571,9 @@ pub fn record_command_buffer_with_image_dep<
 
         device.vk_device.cmd_copy_image_to_buffer(
             command_buffer,
-            device.presentation_image,
+            device.presentation_image().handle,
             ImageLayout::TRANSFER_SRC_OPTIMAL,
-            device.presentation_buffer_readback,
+            device.presentation_buffer_readback().handle,
             &[BufferImageCopy::builder()
                 .image_offset(Offset3D::builder().x(0).y(0).z(0).build())
                 .image_subresource(

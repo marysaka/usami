@@ -33,7 +33,7 @@ fn main() -> VkResult<()> {
     usami::record_command_buffer_with_image_dep(
         &device,
         device.vk_command_buffer,
-        device.presentation_image,
+        device.presentation_image().handle,
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
                 .base_array_layer(0)
