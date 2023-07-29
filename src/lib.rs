@@ -388,60 +388,6 @@ impl UsamiDevice {
         res.resize(image_size as usize, 0);
 
         unsafe {
-            let vk_command_buffer = self.vk_device.allocate_command_buffers(
-                &CommandBufferAllocateInfo::builder()
-                    .command_pool(self.vk_command_pool)
-                    .level(CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1)
-                    .build(),
-            )?[0];
-
-            self.vk_device.begin_command_buffer(
-                vk_command_buffer,
-                &vk::CommandBufferBeginInfo::builder()
-                    .flags(CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-                    .build(),
-            )?;
-
-            self.vk_device.cmd_copy_image_to_buffer(
-                vk_command_buffer,
-                self.presentation_image,
-                ImageLayout::TRANSFER_SRC_OPTIMAL,
-                self.presentation_buffer_readback,
-                &[BufferImageCopy::builder()
-                    .image_offset(Offset3D::builder().x(0).y(0).z(0).build())
-                    .image_subresource(
-                        ImageSubresourceLayers::builder()
-                            .aspect_mask(ImageAspectFlags::COLOR)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .image_extent(vk::Extent3D {
-                        width: self.width,
-                        height: self.height,
-                        depth: 1,
-                    })
-                    .build()],
-            );
-            self.vk_device.cmd_pipeline_barrier(
-                vk_command_buffer,
-                PipelineStageFlags::TRANSFER,
-                PipelineStageFlags::HOST,
-                DependencyFlags::empty(),
-                &[MemoryBarrier::builder()
-                    .src_access_mask(AccessFlags::TRANSFER_WRITE)
-                    .dst_access_mask(AccessFlags::HOST_READ)
-                    .build()],
-                &[],
-                &[],
-            );
-
-            self.vk_device.end_command_buffer(vk_command_buffer)?;
-
-            self.vk_device.device_wait_idle()?;
-            self.vk_device
-                .free_command_buffers(self.vk_command_pool, &[vk_command_buffer]);
-
             let ptr = self.vk_device.map_memory(
                 self.presentation_buffer_readback_allocation,
                 0,
@@ -480,7 +426,9 @@ impl Drop for UsamiDevice {
     }
 }
 
-pub fn record_command_buffer_with_image_dep<F: Fn(&UsamiDevice, CommandBuffer, Image)>(
+pub fn record_command_buffer_with_image_dep<
+    F: Fn(&UsamiDevice, CommandBuffer, Image) -> ImageLayout,
+>(
     device: &UsamiDevice,
     command_buffer: CommandBuffer,
     image: Image,
@@ -503,10 +451,29 @@ pub fn record_command_buffer_with_image_dep<F: Fn(&UsamiDevice, CommandBuffer, I
         )?;
     }
 
-    callback(device, command_buffer, image);
+    let old_image_layout = callback(device, command_buffer, image);
 
     unsafe {
-        /*device.vk_device.cmd_copy_image_to_buffer(
+        device.vk_device.cmd_pipeline_barrier(
+            command_buffer,
+            PipelineStageFlags::BOTTOM_OF_PIPE,
+            PipelineStageFlags::TRANSFER,
+            DependencyFlags::empty(),
+            &[],
+            &[],
+            &[ImageMemoryBarrier::builder()
+                .src_access_mask(AccessFlags::MEMORY_WRITE)
+                .dst_access_mask(AccessFlags::TRANSFER_READ)
+                .old_layout(old_image_layout)
+                .new_layout(ImageLayout::TRANSFER_SRC_OPTIMAL)
+                .src_queue_family_index(device.vk_queue_index)
+                .dst_queue_family_index(device.vk_queue_index)
+                .image(image)
+                .subresource_range(image_subresource_range)
+                .build()],
+        );
+
+        device.vk_device.cmd_copy_image_to_buffer(
             command_buffer,
             device.presentation_image,
             ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -525,30 +492,6 @@ pub fn record_command_buffer_with_image_dep<F: Fn(&UsamiDevice, CommandBuffer, I
                     depth: 1,
                 })
                 .build()],
-        );
-        device.vk_device.cmd_pipeline_barrier(
-            command_buffer,
-            PipelineStageFlags::TRANSFER,
-            PipelineStageFlags::HOST,
-            DependencyFlags::empty(),
-            &[MemoryBarrier::builder()
-                .src_access_mask(AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(AccessFlags::HOST_READ)
-                .build()],
-            &[],
-            &[],
-        );*/
-        device.vk_device.cmd_pipeline_barrier(
-            command_buffer,
-            PipelineStageFlags::TRANSFER,
-            PipelineStageFlags::HOST,
-            DependencyFlags::empty(),
-            &[MemoryBarrier::builder()
-                .src_access_mask(AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(AccessFlags::HOST_READ)
-                .build()],
-            &[],
-            &[],
         );
 
         device.vk_device.end_command_buffer(command_buffer)?;

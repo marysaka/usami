@@ -1,12 +1,10 @@
 use ash::{
-    extensions::ext::DebugUtils,
     prelude::VkResult,
     vk::{
         self, AccessFlags, ClearColorValue, DependencyFlags, Fence, ImageAspectFlags, ImageLayout,
-        ImageMemoryBarrier, ImageSubresourceRange, MemoryBarrier, PipelineStageFlags, SubmitInfo,
+        ImageMemoryBarrier, ImageSubresourceRange, PipelineStageFlags, SubmitInfo,
     },
 };
-use image::EncodableLayout;
 use usami::{UsamiDevice, UsamiInstance};
 
 fn main() -> VkResult<()> {
@@ -75,6 +73,8 @@ fn main() -> VkResult<()> {
                     &clear_color_value,
                     &[image_subresource_range],
                 );
+
+                ImageLayout::TRANSFER_DST_OPTIMAL
             }
         },
     )?;
@@ -91,13 +91,11 @@ fn main() -> VkResult<()> {
         device.vk_device.device_wait_idle()?;
     }
 
-    let image_max_size = (width * height * 4) as usize;
-
     let res: Vec<u8> = device.read_image_memory()?;
 
     image::save_buffer_with_format(
         "output.bmp",
-        &res[..image_max_size],
+        &res,
         width,
         height,
         image::ColorType::Rgba8,
