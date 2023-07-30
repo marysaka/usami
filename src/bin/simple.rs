@@ -19,27 +19,32 @@ fn main() -> VkResult<()> {
         &[],
         width,
         height,
-        Box::new(|(physical_device, prop, feat, queues)| {
-            queues.iter().find_map(|x| {
-                if x.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                    Some((physical_device, prop, feat, queues.clone()))
-                } else {
-                    None
-                }
-            })
+        Box::new(|physical_device| {
+            physical_device
+                .queue_familiy_properties
+                .iter()
+                .enumerate()
+                .find_map(|(i, x)| {
+                    if x.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                        Some(i as u32)
+                    } else {
+                        None
+                    }
+                })
+                .map(|x| (physical_device, x))
         }),
     )?;
 
-    usami::record_command_buffer_with_image_dep(
+    usami::utils::record_command_buffer_with_image_dep(
         &device,
         device.vk_command_buffer,
-        device.presentation_image().handle,
+        device.presentation_image(),
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
                 .base_array_layer(0)
-                .layer_count(1)
+                .layer_count(image.create_info.array_layers)
                 .base_mip_level(0)
-                .level_count(1)
+                .level_count(image.create_info.mip_levels)
                 .aspect_mask(ImageAspectFlags::COLOR)
                 .build();
 
@@ -58,7 +63,7 @@ fn main() -> VkResult<()> {
                         .new_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
                         .src_queue_family_index(device.vk_queue_index)
                         .dst_queue_family_index(device.vk_queue_index)
-                        .image(image)
+                        .image(image.handle)
                         .subresource_range(image_subresource_range)
                         .build()],
                 );
@@ -68,7 +73,7 @@ fn main() -> VkResult<()> {
 
                 device.vk_device.cmd_clear_color_image(
                     command_buffer,
-                    image,
+                    image.handle,
                     ImageLayout::TRANSFER_DST_OPTIMAL,
                     &clear_color_value,
                     &[image_subresource_range],
