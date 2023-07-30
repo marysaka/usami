@@ -1,5 +1,5 @@
 use std::{
-    ffi::{c_char, CString},
+    ffi::{c_char, CStr, CString},
     mem::MaybeUninit,
 };
 
@@ -8,11 +8,11 @@ use ash::{
     vk::{
         BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, CommandBuffer,
         CommandBufferAllocateInfo, CommandBufferLevel, CommandPool, CommandPoolCreateInfo,
-        DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format, ImageAspectFlags,
-        ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
-        ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, PhysicalDevice,
-        PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, Queue,
-        QueueFamilyProperties, SampleCountFlags, SharingMode,
+        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format,
+        Handle, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType,
+        ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
+        ObjectType, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
+        PhysicalDeviceProperties, Queue, QueueFamilyProperties, SampleCountFlags, SharingMode,
     },
 };
 
@@ -162,11 +162,19 @@ impl UsamiDevice {
             )
             .build();
 
-        result.presentation_image.write(UsamiImage::new(
+        let presentation_image = UsamiImage::new(
             &result,
             presentation_image_info,
             MemoryPropertyFlags::HOST_VISIBLE,
-        )?);
+        )?;
+
+        result.set_debug_name(
+            "presentation_image".into(),
+            presentation_image.handle.as_raw(),
+            ObjectType::IMAGE,
+        )?;
+
+        result.presentation_image.write(presentation_image);
         let presentation_image_view = unsafe {
             vk_device.create_image_view(
                 &ImageViewCreateInfo::builder()
@@ -198,11 +206,21 @@ impl UsamiDevice {
             .size(u64::from(width * height * 4))
             .build();
 
-        result.presentation_buffer_readback.write(UsamiBuffer::new(
+        let presentation_buffer_readback = UsamiBuffer::new(
             &result,
             presentation_buffer_readback_info,
             MemoryPropertyFlags::HOST_VISIBLE,
-        )?);
+        )?;
+
+        result.set_debug_name(
+            "presentation_buffer_readback".into(),
+            presentation_buffer_readback.handle.as_raw(),
+            ObjectType::BUFFER,
+        )?;
+
+        result
+            .presentation_buffer_readback
+            .write(presentation_buffer_readback);
 
         Ok(result)
     }
@@ -213,6 +231,28 @@ impl UsamiDevice {
 
     pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
         unsafe { self.presentation_buffer_readback.assume_init_ref() }
+    }
+
+    pub fn set_debug_name(
+        &self,
+        name: String,
+        object_handle: u64,
+        object_type: ObjectType,
+    ) -> VkResult<()> {
+        unsafe {
+            let name = CString::new(name).unwrap();
+
+            self.instance
+                .vk_debug_utils_loader
+                .set_debug_utils_object_name(
+                    self.vk_device.handle(),
+                    &DebugUtilsObjectNameInfoEXT::builder()
+                        .object_handle(object_handle)
+                        .object_type(object_type)
+                        .object_name(name.as_c_str())
+                        .build(),
+                )
+        }
     }
 
     pub fn read_image_memory(&self) -> VkResult<Vec<u8>> {

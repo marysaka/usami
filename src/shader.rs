@@ -1,6 +1,6 @@
 use ash::{
     prelude::*,
-    vk::{ShaderModule, ShaderModuleCreateFlags, ShaderModuleCreateInfo},
+    vk::{Handle, ObjectType, ShaderModule, ShaderModuleCreateFlags, ShaderModuleCreateInfo},
     Device,
 };
 
@@ -34,7 +34,11 @@ impl Drop for UsamiShader {
 }
 
 impl UsamiDevice {
-    pub fn create_shader(&self, _name: String, code: &[u32]) -> VkResult<UsamiShader> {
-        UsamiShader::new(self, code)
+    pub fn create_shader(&self, name: String, code: &[u32]) -> VkResult<UsamiShader> {
+        let shader = UsamiShader::new(self, code)?;
+
+        self.set_debug_name(name, shader.handle.as_raw(), ObjectType::SHADER_MODULE)?;
+
+        Ok(shader)
     }
 }

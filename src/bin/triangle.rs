@@ -1,8 +1,9 @@
 use ash::{
     prelude::VkResult,
     vk::{
-        self, AccessFlags, ClearColorValue, DependencyFlags, Fence, ImageAspectFlags, ImageLayout,
-        ImageMemoryBarrier, ImageSubresourceRange, PipelineStageFlags, SubmitInfo,
+        self, AccessFlags, BufferCreateFlags, BufferUsageFlags, ClearColorValue, DependencyFlags,
+        Fence, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange,
+        PipelineStageFlags, SharingMode, SubmitInfo,
     },
 };
 use usami::{UsamiDevice, UsamiInstance};
@@ -40,6 +41,15 @@ fn main() -> VkResult<()> {
                 })
                 .map(|x| (physical_device, x))
         }),
+    )?;
+
+    let _index_buffer = device.create_buffer(
+        "index_buffer".into(),
+        BufferCreateFlags::empty(),
+        &[device.vk_queue_index],
+        SharingMode::EXCLUSIVE,
+        BufferUsageFlags::INDEX_BUFFER,
+        &[0u32, 1, 2],
     )?;
 
     usami::utils::record_command_buffer_with_image_dep(

@@ -1,8 +1,8 @@
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, MemoryPropertyFlags,
-        SharingMode,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MemoryPropertyFlags,
+        ObjectType, SharingMode,
     },
     Device,
 };
@@ -49,7 +49,7 @@ impl Drop for UsamiBuffer {
 impl UsamiDevice {
     pub fn create_buffer<T: Copy>(
         &self,
-        _name: String,
+        name: String,
         flags: BufferCreateFlags,
         queue_family_indices: &[u32],
         sharing_mode: SharingMode,
@@ -64,6 +64,8 @@ impl UsamiDevice {
             .size(std::mem::size_of_val(data) as u64)
             .build();
         let buffer = UsamiBuffer::new(self, create_info, MemoryPropertyFlags::HOST_VISIBLE)?;
+
+        self.set_debug_name(name, buffer.handle.as_raw(), ObjectType::BUFFER)?;
 
         unsafe {
             let dst_slice =
