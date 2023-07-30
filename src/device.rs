@@ -229,6 +229,10 @@ impl UsamiDevice {
         unsafe { self.presentation_image.assume_init_ref() }
     }
 
+    pub fn presentation_image_view(&self) -> &ImageView {
+        unsafe { self.presentation_image_view.assume_init_ref() }
+    }
+
     pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
         unsafe { self.presentation_buffer_readback.assume_init_ref() }
     }
