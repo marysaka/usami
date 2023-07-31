@@ -30,10 +30,10 @@ impl UsamiDeviceMemory {
             .memory_type_index(device.find_memory_type(&requirements, flags)?)
             .build();
 
-        let handle = unsafe { device.vk_device.allocate_memory(&allocate_info, None)? };
+        let handle = unsafe { device.handle.allocate_memory(&allocate_info, None)? };
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.handle.clone(),
             requirements,
             allocate_info,
             handle,

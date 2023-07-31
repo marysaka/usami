@@ -13,13 +13,11 @@ pub struct UsamiFramebuffer {
 }
 
 impl UsamiFramebuffer {
-    pub fn new(device: &UsamiDevice, create_info: FramebufferCreateInfo) -> VkResult<Self> {
-        let vk_device: &Device = &device.vk_device;
-
-        let handle = unsafe { vk_device.create_framebuffer(&create_info, None)? };
+    pub fn new(device: &Device, create_info: FramebufferCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.create_framebuffer(&create_info, None)? };
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.clone(),
             create_info,
             handle,
         })
@@ -38,7 +36,7 @@ impl UsamiDevice {
         name: String,
         create_info: FramebufferCreateInfo,
     ) -> VkResult<UsamiFramebuffer> {
-        let framebuffer = UsamiFramebuffer::new(self, create_info)?;
+        let framebuffer = UsamiFramebuffer::new(&self.handle, create_info)?;
 
         self.set_debug_name(name, framebuffer.handle.as_raw(), ObjectType::FRAMEBUFFER)?;
 

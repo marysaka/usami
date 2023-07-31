@@ -15,19 +15,15 @@ pub struct UsamiPipelineLayout {
 }
 
 impl UsamiPipelineLayout {
-    pub fn new(device: &UsamiDevice) -> VkResult<Self> {
+    pub fn new(device: &Device) -> VkResult<Self> {
         let create_info = PipelineLayoutCreateInfo::builder()
             .flags(PipelineLayoutCreateFlags::empty())
             .build();
 
-        let handle = unsafe {
-            device
-                .vk_device
-                .create_pipeline_layout(&create_info, None)?
-        };
+        let handle = unsafe { device.create_pipeline_layout(&create_info, None)? };
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.clone(),
             handle,
         })
     }
@@ -46,13 +42,12 @@ pub struct UsamiGraphicsPipeline {
 
 impl UsamiGraphicsPipeline {
     pub fn new(
-        device: &UsamiDevice,
+        device: &Device,
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
     ) -> VkResult<Vec<Self>> {
         let result = unsafe {
             device
-                .vk_device
                 .create_graphics_pipelines(pipeline_cache, create_infos, None)
                 .map_err(|(_, x)| x)?
         };
@@ -60,7 +55,7 @@ impl UsamiGraphicsPipeline {
         Ok(result
             .iter()
             .map(|handle| Self {
-                device: device.vk_device.clone(),
+                device: device.clone(),
                 handle: *handle,
             })
             .collect())
@@ -75,7 +70,7 @@ impl Drop for UsamiGraphicsPipeline {
 
 impl UsamiDevice {
     pub fn create_pipeline_layout(&self, name: String) -> VkResult<UsamiPipelineLayout> {
-        let pipeline_layout = UsamiPipelineLayout::new(self)?;
+        let pipeline_layout = UsamiPipelineLayout::new(&self.handle)?;
 
         self.set_debug_name(
             name,
@@ -92,7 +87,7 @@ impl UsamiDevice {
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
     ) -> VkResult<Vec<UsamiGraphicsPipeline>> {
-        let pipelines = UsamiGraphicsPipeline::new(self, pipeline_cache, create_infos)?;
+        let pipelines = UsamiGraphicsPipeline::new(&self.handle, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
             self.set_debug_name(

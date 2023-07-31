@@ -32,7 +32,7 @@ pub struct UsamiDevice {
 
     pub instance: UsamiInstance,
     pub physical_device: UsamiPhysicalDevice,
-    pub vk_device: ash::Device,
+    pub handle: ash::Device,
     pub command_pool: ManuallyDrop<UsamiCommandPool>,
     pub vk_queue_index: u32,
     pub vk_queue: Queue,
@@ -97,16 +97,16 @@ impl UsamiDevice {
             .enabled_extension_names(&extensions_raw)
             .build();
 
-        let vk_device = unsafe {
+        let handle = unsafe {
             instance
                 .vk_instance
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
-        let vk_queue = unsafe { vk_device.get_device_queue(vk_queue_index, 0) };
+        let vk_queue = unsafe { handle.get_device_queue(vk_queue_index, 0) };
 
         let command_pool = UsamiCommandPool::new(
-            &vk_device,
+            &handle,
             CommandPoolCreateInfo::builder()
                 .queue_family_index(vk_queue_index)
                 .build(),
@@ -117,7 +117,7 @@ impl UsamiDevice {
             height,
             instance,
             physical_device,
-            vk_device,
+            handle,
             vk_queue_index,
             vk_queue,
             command_pool: ManuallyDrop::new(command_pool),
@@ -225,7 +225,7 @@ impl UsamiDevice {
             self.instance
                 .vk_debug_utils_loader
                 .set_debug_utils_object_name(
-                    self.vk_device.handle(),
+                    self.handle.handle(),
                     &DebugUtilsObjectNameInfoEXT::builder()
                         .object_handle(object_handle)
                         .object_type(object_type)
@@ -249,7 +249,7 @@ impl Drop for UsamiDevice {
             self.presentation_image_view.assume_init_drop();
             self.presentation_buffer_readback.assume_init_drop();
             self.presentation_image.assume_init_drop();
-            self.vk_device.destroy_device(None);
+            self.handle.destroy_device(None);
         }
     }
 }

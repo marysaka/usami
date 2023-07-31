@@ -22,7 +22,7 @@ impl UsamiImage {
         create_info: ImageCreateInfo,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
-        let vk_device: &Device = &device.vk_device;
+        let vk_device: &Device = &device.handle;
 
         let handle = unsafe { vk_device.create_image(&create_info, None)? };
         let req = unsafe { vk_device.get_image_memory_requirements(handle) };
@@ -32,7 +32,7 @@ impl UsamiImage {
         }
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.handle.clone(),
             create_info,
             handle,
             device_memory,
@@ -111,7 +111,7 @@ impl UsamiDevice {
         name: String,
         create_info: ImageViewCreateInfo,
     ) -> VkResult<UsamiImageView> {
-        let image_view = UsamiImageView::new(&self.vk_device, create_info)?;
+        let image_view = UsamiImageView::new(&self.handle, create_info)?;
 
         self.set_debug_name(name, image_view.handle.as_raw(), ObjectType::IMAGE_VIEW)?;
 

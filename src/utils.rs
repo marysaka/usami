@@ -55,7 +55,7 @@ pub fn record_command_buffer_with_image_dep<
         .build();
 
     unsafe {
-        device.vk_device.begin_command_buffer(
+        device.handle.begin_command_buffer(
             command_buffer,
             &CommandBufferBeginInfo::builder()
                 .flags(CommandBufferUsageFlags::SIMULTANEOUS_USE)
@@ -66,7 +66,7 @@ pub fn record_command_buffer_with_image_dep<
     let old_image_layout = callback(device, command_buffer, image);
 
     unsafe {
-        device.vk_device.cmd_pipeline_barrier(
+        device.handle.cmd_pipeline_barrier(
             command_buffer,
             PipelineStageFlags::BOTTOM_OF_PIPE,
             PipelineStageFlags::TRANSFER,
@@ -85,7 +85,7 @@ pub fn record_command_buffer_with_image_dep<
                 .build()],
         );
 
-        device.vk_device.cmd_copy_image_to_buffer(
+        device.handle.cmd_copy_image_to_buffer(
             command_buffer,
             device.presentation_image().handle,
             ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -106,7 +106,7 @@ pub fn record_command_buffer_with_image_dep<
                 .build()],
         );
 
-        device.vk_device.end_command_buffer(command_buffer)?;
+        device.handle.end_command_buffer(command_buffer)?;
     }
 
     Ok(())

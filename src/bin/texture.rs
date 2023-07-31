@@ -291,7 +291,7 @@ fn main() -> VkResult<()> {
         command_buffers[0].handle,
         device.presentation_image(),
         |device, command_buffer, _image| {
-            let vk_device = &device.vk_device;
+            let vk_device = &device.handle;
             let clear_values = [ClearValue {
                 color: vk::ClearColorValue {
                     float32: [0.0, 0.0, 0.0, 0.0],
@@ -349,7 +349,7 @@ fn main() -> VkResult<()> {
     )?;
 
     unsafe {
-        device.vk_device.queue_submit(
+        device.handle.queue_submit(
             device.vk_queue,
             &[SubmitInfo::builder()
                 .command_buffers(&[command_buffers[0].handle])
@@ -357,7 +357,7 @@ fn main() -> VkResult<()> {
             Fence::null(),
         )?;
 
-        device.vk_device.device_wait_idle()?;
+        device.handle.device_wait_idle()?;
     }
 
     let res: Vec<u8> = device.read_image_memory()?;

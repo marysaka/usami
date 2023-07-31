@@ -22,7 +22,7 @@ impl UsamiBuffer {
         create_info: BufferCreateInfo,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
-        let vk_device: &Device = &device.vk_device;
+        let vk_device: &Device = &device.handle;
 
         let handle = unsafe { vk_device.create_buffer(&create_info, None)? };
         let req = unsafe { vk_device.get_buffer_memory_requirements(handle) };
@@ -32,7 +32,7 @@ impl UsamiBuffer {
         }
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.handle.clone(),
             create_info,
             handle,
             device_memory,

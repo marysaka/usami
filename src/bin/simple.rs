@@ -57,7 +57,7 @@ fn main() -> VkResult<()> {
                 .build();
 
             unsafe {
-                device.vk_device.cmd_pipeline_barrier(
+                device.handle.cmd_pipeline_barrier(
                     command_buffer,
                     PipelineStageFlags::TRANSFER,
                     PipelineStageFlags::TRANSFER,
@@ -79,7 +79,7 @@ fn main() -> VkResult<()> {
                 let mut clear_color_value = ClearColorValue::default();
                 clear_color_value.float32 = [0.6f32, 0.5f32, 1.0f32, 1.0f32];
 
-                device.vk_device.cmd_clear_color_image(
+                device.handle.cmd_clear_color_image(
                     command_buffer,
                     image.handle,
                     ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -93,7 +93,7 @@ fn main() -> VkResult<()> {
     )?;
 
     unsafe {
-        device.vk_device.queue_submit(
+        device.handle.queue_submit(
             device.vk_queue,
             &[SubmitInfo::builder()
                 .command_buffers(&[command_buffers[0].handle])
@@ -101,7 +101,7 @@ fn main() -> VkResult<()> {
             Fence::null(),
         )?;
 
-        device.vk_device.device_wait_idle()?;
+        device.handle.device_wait_idle()?;
     }
 
     let res: Vec<u8> = device.read_image_memory()?;

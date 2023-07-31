@@ -31,7 +31,7 @@ impl UsamiCommandPool {
         level: CommandBufferLevel,
         command_buffer_count: u32,
     ) -> VkResult<Vec<UsamiCommandBuffer>> {
-        assert_eq!(self.device.handle(), device.vk_device.handle());
+        assert_eq!(self.device.handle(), device.handle.handle());
 
         let command_buffers = UsamiCommandBuffer::new(
             &self.device,
@@ -96,7 +96,7 @@ impl UsamiDevice {
         name: String,
         create_info: CommandPoolCreateInfo,
     ) -> VkResult<UsamiCommandPool> {
-        let shader = UsamiCommandPool::new(&self.vk_device, create_info)?;
+        let shader = UsamiCommandPool::new(&self.handle, create_info)?;
 
         self.set_debug_name(name, shader.handle.as_raw(), ObjectType::COMMAND_POOL)?;
 

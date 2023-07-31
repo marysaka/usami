@@ -12,16 +12,16 @@ pub struct UsamiShader {
 }
 
 impl UsamiShader {
-    pub fn new(device: &UsamiDevice, code: &[u32]) -> VkResult<Self> {
+    pub fn new(device: &Device, code: &[u32]) -> VkResult<Self> {
         let create_info = ShaderModuleCreateInfo::builder()
             .code(code)
             .flags(ShaderModuleCreateFlags::empty())
             .build();
 
-        let handle = unsafe { device.vk_device.create_shader_module(&create_info, None)? };
+        let handle = unsafe { device.create_shader_module(&create_info, None)? };
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.clone(),
             handle,
         })
     }
@@ -35,7 +35,7 @@ impl Drop for UsamiShader {
 
 impl UsamiDevice {
     pub fn create_shader(&self, name: String, code: &[u32]) -> VkResult<UsamiShader> {
-        let shader = UsamiShader::new(self, code)?;
+        let shader = UsamiShader::new(&self.handle, code)?;
 
         self.set_debug_name(name, shader.handle.as_raw(), ObjectType::SHADER_MODULE)?;
 

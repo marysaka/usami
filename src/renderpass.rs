@@ -12,11 +12,11 @@ pub struct UsamiRenderPass {
 }
 
 impl UsamiRenderPass {
-    pub fn new(device: &UsamiDevice, create_info: RenderPassCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.vk_device.create_render_pass(&create_info, None)? };
+    pub fn new(device: &Device, create_info: RenderPassCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.create_render_pass(&create_info, None)? };
 
         Ok(Self {
-            device: device.vk_device.clone(),
+            device: device.clone(),
             handle,
         })
     }
@@ -34,7 +34,7 @@ impl UsamiDevice {
         name: String,
         create_info: RenderPassCreateInfo,
     ) -> VkResult<UsamiRenderPass> {
-        let shader = UsamiRenderPass::new(self, create_info)?;
+        let shader = UsamiRenderPass::new(&self.handle, create_info)?;
 
         self.set_debug_name(name, shader.handle.as_raw(), ObjectType::RENDER_PASS)?;
 
