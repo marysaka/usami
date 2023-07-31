@@ -7,15 +7,16 @@ use ash::{
     prelude::*,
     vk::{
         BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, CommandPoolCreateInfo,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format,
-        Handle, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType,
-        ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
-        ObjectType, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
-        PhysicalDeviceProperties, Queue, QueueFamilyProperties, SampleCountFlags, SharingMode,
+        ComponentMapping, ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo,
+        DeviceQueueCreateInfo, Extent3D, Format, Handle, ImageAspectFlags, ImageCreateInfo,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags,
+        ImageViewType, MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
+        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, Queue, QueueFamilyProperties,
+        SampleCountFlags, SharingMode,
     },
 };
 
-use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiInstance};
+use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiImageView, UsamiInstance};
 
 pub struct UsamiPhysicalDevice {
     pub handle: PhysicalDevice,
@@ -36,7 +37,7 @@ pub struct UsamiDevice {
     pub vk_queue_index: u32,
     pub vk_queue: Queue,
     pub presentation_image: MaybeUninit<UsamiImage>,
-    pub presentation_image_view: MaybeUninit<ImageView>,
+    pub presentation_image_view: MaybeUninit<UsamiImageView>,
     pub presentation_buffer_readback: MaybeUninit<UsamiBuffer>,
 }
 
@@ -125,8 +126,6 @@ impl UsamiDevice {
             presentation_buffer_readback: MaybeUninit::uninit(),
         };
 
-        let vk_device = &result.vk_device;
-
         let presentation_image_info = ImageCreateInfo::builder()
             .image_type(ImageType::TYPE_2D)
             .format(Format::R8G8B8A8_UNORM)
@@ -147,38 +146,30 @@ impl UsamiDevice {
             )
             .build();
 
-        let presentation_image = UsamiImage::new(
-            &result,
+        result.presentation_image.write(result.create_image(
+            "presentation_image".into(),
             presentation_image_info,
             MemoryPropertyFlags::HOST_VISIBLE,
+        )?);
+        let presentation_image_view = result.presentation_image().create_simple_image_view(
+            &result,
+            "presentation_image_view".into(),
+            ImageViewType::TYPE_2D,
+            ImageSubresourceRange::builder()
+                .aspect_mask(ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1)
+                .build(),
+            ComponentMapping::builder()
+                .r(ComponentSwizzle::IDENTITY)
+                .g(ComponentSwizzle::IDENTITY)
+                .b(ComponentSwizzle::IDENTITY)
+                .a(ComponentSwizzle::IDENTITY)
+                .build(),
+            ImageViewCreateFlags::empty(),
         )?;
-
-        result.set_debug_name(
-            "presentation_image".into(),
-            presentation_image.handle.as_raw(),
-            ObjectType::IMAGE,
-        )?;
-
-        result.presentation_image.write(presentation_image);
-        let presentation_image_view = unsafe {
-            vk_device.create_image_view(
-                &ImageViewCreateInfo::builder()
-                    .view_type(ImageViewType::TYPE_2D)
-                    .format(Format::R8G8B8A8_UNORM)
-                    .image(result.presentation_image().handle)
-                    .subresource_range(
-                        ImageSubresourceRange::builder()
-                            .aspect_mask(ImageAspectFlags::COLOR)
-                            .base_mip_level(0)
-                            .level_count(1)
-                            .base_array_layer(0)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .build(),
-                None,
-            )?
-        };
         result
             .presentation_image_view
             .write(presentation_image_view);
@@ -214,7 +205,7 @@ impl UsamiDevice {
         unsafe { self.presentation_image.assume_init_ref() }
     }
 
-    pub fn presentation_image_view(&self) -> &ImageView {
+    pub fn presentation_image_view(&self) -> &UsamiImageView {
         unsafe { self.presentation_image_view.assume_init_ref() }
     }
 
@@ -255,9 +246,7 @@ impl Drop for UsamiDevice {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.command_pool);
-            self.vk_device
-                .destroy_image_view(self.presentation_image_view.assume_init(), None);
-
+            self.presentation_image_view.assume_init_drop();
             self.presentation_buffer_readback.assume_init_drop();
             self.presentation_image.assume_init_drop();
             self.vk_device.destroy_device(None);

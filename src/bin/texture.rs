@@ -272,7 +272,7 @@ fn main() -> VkResult<()> {
         "framebuffer".into(),
         FramebufferCreateInfo::builder()
             .render_pass(render_pass.handle)
-            .attachments(&[*device.presentation_image_view()])
+            .attachments(&[device.presentation_image_view().handle])
             .width(device.width)
             .height(device.height)
             .layers(1)
