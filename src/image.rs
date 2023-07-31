@@ -1,8 +1,10 @@
 use ash::{
     prelude::*,
     vk::{
-        ComponentMapping, Handle, Image, ImageCreateInfo, ImageSubresourceRange, ImageView,
+        BufferCreateFlags, BufferUsageFlags, ComponentMapping, Extent3D, Format, Handle, Image,
+        ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
         ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
+        SampleCountFlags, SharingMode,
     },
     Device,
 };
@@ -116,5 +118,43 @@ impl UsamiDevice {
         self.set_debug_name(name, image_view.handle.as_raw(), ObjectType::IMAGE_VIEW)?;
 
         Ok(image_view)
+    }
+
+    pub fn import_2d_rgba8_image(
+        &self,
+        name: String,
+        width: u32,
+        height: u32,
+        data: &[u8],
+        usage: ImageUsageFlags,
+    ) -> VkResult<UsamiImage> {
+        let temporary_buffer = self.create_buffer(
+            format!("{name}_temp_buffer"),
+            BufferCreateFlags::empty(),
+            SharingMode::EXCLUSIVE,
+            BufferUsageFlags::TRANSFER_SRC,
+            data,
+        )?;
+
+        let image_create_info = ImageCreateInfo::builder()
+            .image_type(ImageType::TYPE_2D)
+            .format(Format::R8G8B8A8_UNORM)
+            .extent(Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(SampleCountFlags::TYPE_1)
+            .tiling(ImageTiling::OPTIMAL)
+            .usage(usage | ImageUsageFlags::TRANSFER_DST)
+            .build();
+        let image =
+            self.create_image(name, image_create_info, MemoryPropertyFlags::DEVICE_LOCAL)?;
+
+        self.copy_buffer_to_image(&temporary_buffer, &image)?;
+
+        Ok(image)
     }
 }

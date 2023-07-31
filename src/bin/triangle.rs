@@ -60,7 +60,6 @@ fn main() -> VkResult<()> {
     let index_buffer = device.create_buffer(
         "index_buffer".into(),
         BufferCreateFlags::empty(),
-        &[device.vk_queue_index],
         SharingMode::EXCLUSIVE,
         BufferUsageFlags::INDEX_BUFFER,
         &index_buffer_data,
@@ -84,7 +83,6 @@ fn main() -> VkResult<()> {
     let vbo_buffer = device.create_buffer(
         "vbo_buffer".into(),
         BufferCreateFlags::empty(),
-        &[device.vk_queue_index],
         SharingMode::EXCLUSIVE,
         BufferUsageFlags::VERTEX_BUFFER,
         &vertices,

@@ -51,14 +51,12 @@ impl UsamiDevice {
         &self,
         name: String,
         flags: BufferCreateFlags,
-        queue_family_indices: &[u32],
         sharing_mode: SharingMode,
         usage: BufferUsageFlags,
         data: &[T],
     ) -> VkResult<UsamiBuffer> {
         let create_info = BufferCreateInfo::builder()
             .flags(flags)
-            .queue_family_indices(queue_family_indices)
             .sharing_mode(sharing_mode)
             .usage(usage)
             .size(std::mem::size_of_val(data) as u64)

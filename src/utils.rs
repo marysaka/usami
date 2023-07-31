@@ -1,14 +1,14 @@
 use ash::{
     prelude::VkResult,
     vk::{
-        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferBeginInfo,
-        CommandBufferUsageFlags, DependencyFlags, Extent3D, ImageAspectFlags, ImageLayout,
-        ImageMemoryBarrier, ImageSubresourceLayers, ImageSubresourceRange, Offset3D,
-        PipelineStageFlags,
+        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferBeginInfo, CommandBufferLevel,
+        CommandBufferUsageFlags, DependencyFlags, Extent3D, FenceCreateFlags, FenceCreateInfo,
+        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
+        ImageSubresourceRange, Offset3D, PipelineStageFlags, SubmitInfo,
     },
 };
 
-use crate::{UsamiDevice, UsamiImage};
+use crate::{UsamiCommandBuffer, UsamiDevice, UsamiImage};
 
 #[macro_export]
 macro_rules! offset_of {
@@ -107,6 +107,59 @@ pub fn record_command_buffer_with_image_dep<
         );
 
         device.handle.end_command_buffer(command_buffer)?;
+    }
+
+    Ok(())
+}
+
+pub fn record_and_execute_command_buffer<
+    F: Fn(&UsamiDevice, &UsamiCommandBuffer) -> VkResult<()>,
+>(
+    device: &UsamiDevice,
+    command_buffer_name: String,
+    callback: F,
+) -> VkResult<()> {
+    unsafe {
+        let command_buffers = device.command_pool.allocate_command_buffers(
+            device,
+            command_buffer_name,
+            CommandBufferLevel::PRIMARY,
+            1,
+        )?;
+
+        let command_buffer = &command_buffers[0];
+
+        device.handle.begin_command_buffer(
+            command_buffer.handle,
+            &CommandBufferBeginInfo::builder()
+                .flags(CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+                .build(),
+        )?;
+
+        callback(device, command_buffer)?;
+
+        device.handle.end_command_buffer(command_buffer.handle)?;
+
+        // TODO: wrapper around fence
+        let fence = device.handle.create_fence(
+            &FenceCreateInfo::builder()
+                .flags(FenceCreateFlags::empty())
+                .build(),
+            None,
+        )?;
+
+        device.handle.queue_submit(
+            device.vk_queue,
+            &[SubmitInfo::builder()
+                .command_buffers(&[command_buffer.handle])
+                .build()],
+            fence,
+        )?;
+        device
+            .handle
+            .wait_for_fences(&[fence], true, std::u64::MAX)?;
+        device.handle.reset_fences(&[fence])?;
+        device.handle.destroy_fence(fence, None);
     }
 
     Ok(())

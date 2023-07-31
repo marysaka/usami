@@ -6,8 +6,8 @@ use ash::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
         ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D, Fence, Format,
-        FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp,
-        PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, ImageUsageFlags,
+        LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
         PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
         PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
@@ -19,6 +19,7 @@ use ash::{
         VertexInputRate, Viewport,
     },
 };
+use image::EncodableLayout;
 use usami::{offset_of, UsamiDevice, UsamiInstance};
 
 #[derive(Clone, Debug, Copy)]
@@ -56,11 +57,22 @@ fn main() -> VkResult<()> {
         }),
     )?;
 
+    let white_image_buffer =
+        image::load_from_memory(include_bytes!("../../resources/texture/white.png"))
+            .unwrap()
+            .to_rgba8();
+    let _white_image = device.import_2d_rgba8_image(
+        "white_image".into(),
+        white_image_buffer.width(),
+        white_image_buffer.height(),
+        white_image_buffer.as_bytes(),
+        ImageUsageFlags::SAMPLED,
+    )?;
+
     let index_buffer_data = [0u32, 1, 2, 2, 3, 0];
     let index_buffer = device.create_buffer(
         "index_buffer".into(),
         BufferCreateFlags::empty(),
-        &[device.vk_queue_index],
         SharingMode::EXCLUSIVE,
         BufferUsageFlags::INDEX_BUFFER,
         &index_buffer_data,
@@ -87,7 +99,6 @@ fn main() -> VkResult<()> {
     let vbo_buffer = device.create_buffer(
         "vbo_buffer".into(),
         BufferCreateFlags::empty(),
-        &[device.vk_queue_index],
         SharingMode::EXCLUSIVE,
         BufferUsageFlags::VERTEX_BUFFER,
         &vertices,

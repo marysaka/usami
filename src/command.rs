@@ -1,13 +1,16 @@
 use ash::{
     prelude::*,
     vk::{
-        CommandBuffer, CommandBufferAllocateInfo, CommandBufferLevel, CommandPool,
-        CommandPoolCreateInfo, Handle, ObjectType,
+        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo,
+        CommandBufferLevel, CommandPool,
+        CommandPoolCreateInfo, DependencyFlags, Handle,
+        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
+        ImageSubresourceRange, ObjectType, PipelineStageFlags,
     },
     Device,
 };
 
-use crate::UsamiDevice;
+use crate::{utils, UsamiBuffer, UsamiDevice, UsamiImage};
 
 pub struct UsamiCommandPool {
     device: Device,
@@ -101,5 +104,73 @@ impl UsamiDevice {
         self.set_debug_name(name, shader.handle.as_raw(), ObjectType::COMMAND_POOL)?;
 
         Ok(shader)
+    }
+
+    pub fn copy_buffer_to_image(&self, buffer: &UsamiBuffer, image: &UsamiImage) -> VkResult<()> {
+        utils::record_and_execute_command_buffer(
+            self,
+            "b2i_cmd_buffer".into(),
+            |device, command_buffer| unsafe {
+                let image_subresource_range = ImageSubresourceRange::builder()
+                    .base_array_layer(0)
+                    .layer_count(image.create_info.array_layers)
+                    .base_mip_level(0)
+                    .level_count(image.create_info.mip_levels)
+                    .aspect_mask(ImageAspectFlags::COLOR)
+                    .build();
+
+                device.handle.cmd_pipeline_barrier(
+                    command_buffer.handle,
+                    PipelineStageFlags::TRANSFER,
+                    PipelineStageFlags::TRANSFER,
+                    DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[ImageMemoryBarrier::builder()
+                        .src_access_mask(AccessFlags::empty())
+                        .dst_access_mask(AccessFlags::TRANSFER_WRITE)
+                        .old_layout(ImageLayout::UNDEFINED)
+                        .new_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
+                        .image(image.handle)
+                        .subresource_range(image_subresource_range)
+                        .build()],
+                );
+
+                device.handle.cmd_copy_buffer_to_image(
+                    command_buffer.handle,
+                    buffer.handle,
+                    image.handle,
+                    ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &[BufferImageCopy::builder()
+                        .image_subresource(
+                            ImageSubresourceLayers::builder()
+                                .aspect_mask(ImageAspectFlags::COLOR)
+                                .layer_count(1)
+                                .build(),
+                        )
+                        .image_extent(image.create_info.extent)
+                        .build()],
+                );
+
+                device.handle.cmd_pipeline_barrier(
+                    command_buffer.handle,
+                    PipelineStageFlags::TRANSFER,
+                    PipelineStageFlags::TRANSFER,
+                    DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[ImageMemoryBarrier::builder()
+                        .src_access_mask(AccessFlags::TRANSFER_WRITE)
+                        .dst_access_mask(AccessFlags::MEMORY_READ)
+                        .old_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
+                        .new_layout(ImageLayout::GENERAL)
+                        .image(image.handle)
+                        .subresource_range(image_subresource_range)
+                        .build()],
+                );
+
+                Ok(())
+            },
+        )
     }
 }
