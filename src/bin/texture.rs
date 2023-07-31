@@ -169,14 +169,14 @@ fn main() -> VkResult<()> {
     )?;
 
     let sampler_create_info = SamplerCreateInfo::builder()
-        .mag_filter(Filter::LINEAR)
-        .min_filter(Filter::LINEAR)
-        .mipmap_mode(SamplerMipmapMode::LINEAR)
-        .address_mode_u(SamplerAddressMode::MIRRORED_REPEAT)
-        .address_mode_v(SamplerAddressMode::MIRRORED_REPEAT)
-        .address_mode_w(SamplerAddressMode::MIRRORED_REPEAT)
+        .mag_filter(Filter::NEAREST)
+        .min_filter(Filter::NEAREST)
+        .mipmap_mode(SamplerMipmapMode::NEAREST)
+        .address_mode_u(SamplerAddressMode::REPEAT)
+        .address_mode_v(SamplerAddressMode::REPEAT)
+        .address_mode_w(SamplerAddressMode::REPEAT)
         .max_anisotropy(1.0)
-        .border_color(BorderColor::FLOAT_OPAQUE_WHITE)
+        .border_color(BorderColor::FLOAT_TRANSPARENT_BLACK)
         .compare_op(CompareOp::NEVER)
         .build();
 
