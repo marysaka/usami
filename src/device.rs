@@ -1,13 +1,12 @@
 use std::{
     ffi::{c_char, CString},
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
 };
 
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, CommandBuffer,
-        CommandBufferAllocateInfo, CommandBufferLevel, CommandPool, CommandPoolCreateInfo,
+        BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, CommandPoolCreateInfo,
         DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format,
         Handle, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType,
         ImageUsageFlags, ImageView, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
@@ -16,7 +15,7 @@ use ash::{
     },
 };
 
-use crate::{UsamiBuffer, UsamiImage, UsamiInstance};
+use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiInstance};
 
 pub struct UsamiPhysicalDevice {
     pub handle: PhysicalDevice,
@@ -33,8 +32,7 @@ pub struct UsamiDevice {
     pub instance: UsamiInstance,
     pub physical_device: UsamiPhysicalDevice,
     pub vk_device: ash::Device,
-    pub vk_command_pool: CommandPool,
-    pub vk_command_buffer: CommandBuffer,
+    pub command_pool: ManuallyDrop<UsamiCommandPool>,
     pub vk_queue_index: u32,
     pub vk_queue: Queue,
     pub presentation_image: MaybeUninit<UsamiImage>,
@@ -106,24 +104,12 @@ impl UsamiDevice {
 
         let vk_queue = unsafe { vk_device.get_device_queue(vk_queue_index, 0) };
 
-        let vk_command_pool = unsafe {
-            vk_device.create_command_pool(
-                &CommandPoolCreateInfo::builder()
-                    .queue_family_index(vk_queue_index)
-                    .build(),
-                None,
-            )
-        }?;
-
-        let vk_command_buffer = unsafe {
-            vk_device.allocate_command_buffers(
-                &CommandBufferAllocateInfo::builder()
-                    .command_pool(vk_command_pool)
-                    .level(CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1)
-                    .build(),
-            )?[0]
-        };
+        let command_pool = UsamiCommandPool::new(
+            &vk_device,
+            CommandPoolCreateInfo::builder()
+                .queue_family_index(vk_queue_index)
+                .build(),
+        )?;
 
         let mut result = Self {
             width,
@@ -133,8 +119,7 @@ impl UsamiDevice {
             vk_device,
             vk_queue_index,
             vk_queue,
-            vk_command_pool,
-            vk_command_buffer,
+            command_pool: ManuallyDrop::new(command_pool),
             presentation_image: MaybeUninit::uninit(),
             presentation_image_view: MaybeUninit::uninit(),
             presentation_buffer_readback: MaybeUninit::uninit(),
@@ -269,10 +254,7 @@ impl UsamiDevice {
 impl Drop for UsamiDevice {
     fn drop(&mut self) {
         unsafe {
-            self.vk_device
-                .free_command_buffers(self.vk_command_pool, &[self.vk_command_buffer]);
-            self.vk_device
-                .destroy_command_pool(self.vk_command_pool, None);
+            ManuallyDrop::drop(&mut self.command_pool);
             self.vk_device
                 .destroy_image_view(self.presentation_image_view.assume_init(), None);
 

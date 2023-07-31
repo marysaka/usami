@@ -5,7 +5,7 @@ use ash::{
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
-        ColorComponentFlags, CompareOp, DynamicState, Extent2D, Fence, Format,
+        ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D, Fence, Format,
         FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp,
         PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
@@ -279,9 +279,16 @@ fn main() -> VkResult<()> {
             .build(),
     )?;
 
+    let command_buffers = device.command_pool.allocate_command_buffers(
+        &device,
+        "command_buffer".into(),
+        CommandBufferLevel::PRIMARY,
+        1,
+    )?;
+
     usami::utils::record_command_buffer_with_image_dep(
         &device,
-        device.vk_command_buffer,
+        command_buffers[0].handle,
         device.presentation_image(),
         |device, command_buffer, _image| {
             let vk_device = &device.vk_device;
@@ -345,7 +352,7 @@ fn main() -> VkResult<()> {
         device.vk_device.queue_submit(
             device.vk_queue,
             &[SubmitInfo::builder()
-                .command_buffers(&[device.vk_command_buffer])
+                .command_buffers(&[command_buffers[0].handle])
                 .build()],
             Fence::null(),
         )?;

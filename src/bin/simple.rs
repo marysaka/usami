@@ -1,8 +1,9 @@
 use ash::{
     prelude::VkResult,
     vk::{
-        self, AccessFlags, ClearColorValue, DependencyFlags, Fence, ImageAspectFlags, ImageLayout,
-        ImageMemoryBarrier, ImageSubresourceRange, PipelineStageFlags, SubmitInfo,
+        self, AccessFlags, ClearColorValue, CommandBufferLevel, DependencyFlags, Fence,
+        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange,
+        PipelineStageFlags, SubmitInfo,
     },
 };
 use usami::{UsamiDevice, UsamiInstance};
@@ -35,9 +36,16 @@ fn main() -> VkResult<()> {
         }),
     )?;
 
+    let command_buffers = device.command_pool.allocate_command_buffers(
+        &device,
+        "command_buffer".into(),
+        CommandBufferLevel::PRIMARY,
+        1,
+    )?;
+
     usami::utils::record_command_buffer_with_image_dep(
         &device,
-        device.vk_command_buffer,
+        command_buffers[0].handle,
         device.presentation_image(),
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
@@ -88,7 +96,7 @@ fn main() -> VkResult<()> {
         device.vk_device.queue_submit(
             device.vk_queue,
             &[SubmitInfo::builder()
-                .command_buffers(&[device.vk_command_buffer])
+                .command_buffers(&[command_buffers[0].handle])
                 .build()],
             Fence::null(),
         )?;
