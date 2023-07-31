@@ -1,8 +1,8 @@
 use ash::{
     prelude::*,
     vk::{
-        GraphicsPipelineCreateInfo, Handle, ObjectType, Pipeline, PipelineCache, PipelineLayout,
-        PipelineLayoutCreateFlags, PipelineLayoutCreateInfo,
+        DescriptorSetLayout, GraphicsPipelineCreateInfo, Handle, ObjectType, Pipeline,
+        PipelineCache, PipelineLayout, PipelineLayoutCreateFlags, PipelineLayoutCreateInfo,
     },
     Device,
 };
@@ -15,8 +15,9 @@ pub struct UsamiPipelineLayout {
 }
 
 impl UsamiPipelineLayout {
-    pub fn new(device: &Device) -> VkResult<Self> {
+    pub fn new(device: &Device, layouts: &[DescriptorSetLayout]) -> VkResult<Self> {
         let create_info = PipelineLayoutCreateInfo::builder()
+            .set_layouts(layouts)
             .flags(PipelineLayoutCreateFlags::empty())
             .build();
 
@@ -69,8 +70,12 @@ impl Drop for UsamiGraphicsPipeline {
 }
 
 impl UsamiDevice {
-    pub fn create_pipeline_layout(&self, name: String) -> VkResult<UsamiPipelineLayout> {
-        let pipeline_layout = UsamiPipelineLayout::new(&self.handle)?;
+    pub fn create_pipeline_layout(
+        &self,
+        name: String,
+        layouts: &[DescriptorSetLayout],
+    ) -> VkResult<UsamiPipelineLayout> {
+        let pipeline_layout = UsamiPipelineLayout::new(&self.handle, layouts)?;
 
         self.set_debug_name(
             name,

@@ -4,19 +4,23 @@ use ash::{
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
-        AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
-        ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D, Fence, Format,
-        FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, ImageUsageFlags,
-        LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferUsageFlags,
+        ClearValue, ColorComponentFlags, CommandBufferLevel, CompareOp, ComponentMapping,
+        ComponentSwizzle, DescriptorImageInfo, DescriptorPoolCreateInfo,
+        DescriptorSetLayoutCreateInfo, DescriptorType, DynamicState, Extent2D, Fence, Filter,
+        Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags,
+        ImageLayout, ImageSubresourceRange, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
+        IndexType, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
         PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
         PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
         PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
         PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags, Rect2D,
-        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, SharingMode,
-        StencilOp, StencilOpState, SubmitInfo, SubpassContents, SubpassDependency,
-        SubpassDescription, VertexInputAttributeDescription, VertexInputBindingDescription,
-        VertexInputRate, Viewport,
+        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, SamplerAddressMode,
+        SamplerCreateInfo, SamplerMipmapMode, ShaderStageFlags, SharingMode, StencilOp,
+        StencilOpState, SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
+        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
+        WriteDescriptorSet,
     },
 };
 use image::EncodableLayout;
@@ -26,7 +30,7 @@ use usami::{offset_of, UsamiDevice, UsamiInstance};
 #[repr(C)]
 struct Vertex {
     pos: [f32; 4],
-    color: [f32; 4],
+    uv: [f32; 2],
 }
 
 fn main() -> VkResult<()> {
@@ -61,7 +65,7 @@ fn main() -> VkResult<()> {
         image::load_from_memory(include_bytes!("../../resources/texture/white.png"))
             .unwrap()
             .to_rgba8();
-    let _white_image = device.import_2d_rgba8_image(
+    let white_image = device.import_2d_rgba8_image(
         "white_image".into(),
         white_image_buffer.width(),
         white_image_buffer.height(),
@@ -81,19 +85,19 @@ fn main() -> VkResult<()> {
     let vertices = [
         Vertex {
             pos: [-1.0, -1.0, 0.0, 1.0],
-            color: [0.0, 1.0, 0.0, 1.0],
+            uv: [0.0, 0.0],
         },
         Vertex {
             pos: [-1.0, 1.0, 0.0, 1.0],
-            color: [0.0, 0.0, 1.0, 1.0],
+            uv: [0.0, 1.0],
         },
         Vertex {
             pos: [1.0, 1.0, 0.0, 1.0],
-            color: [1.0, 0.0, 0.0, 1.0],
+            uv: [1.0, 1.0],
         },
         Vertex {
             pos: [1.0, -1.0, 0.0, 1.0],
-            color: [1.0, 0.0, 0.0, 1.0],
+            uv: [1.0, 0.0],
         },
     ];
     let vbo_buffer = device.create_buffer(
@@ -105,15 +109,100 @@ fn main() -> VkResult<()> {
     )?;
 
     let vertex_shader_code =
-        usami::utils::as_u32_vec(include_bytes!("../../resources/triangle/main.vert.spv"));
+        usami::utils::as_u32_vec(include_bytes!("../../resources/texture/main.vert.spv"));
     let frag_shader_code =
-        usami::utils::as_u32_vec(include_bytes!("../../resources/triangle/main.frag.spv"));
+        usami::utils::as_u32_vec(include_bytes!("../../resources/texture/main.frag.spv"));
 
     let vertex_shader = device.create_shader("vertex_shader".into(), &vertex_shader_code)?;
     let frag_shader = device.create_shader("frag_shader".into(), &frag_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
-    let pipeline_layout = device.create_pipeline_layout("base_pipeline_layout".into())?;
+    let descriptor_pool_sizes = [vk::DescriptorPoolSize {
+        ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        descriptor_count: 1,
+    }];
+    let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
+        .pool_sizes(&descriptor_pool_sizes)
+        .max_sets(1)
+        .build();
+
+    let descriptor_pool =
+        device.create_descriptor_pool("descriptor_pool".into(), descriptor_pool_create_info)?;
+
+    let desc_layout_bindings = [vk::DescriptorSetLayoutBinding::builder()
+        .binding(0)
+        .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(1)
+        .stage_flags(ShaderStageFlags::FRAGMENT)
+        .build()];
+    let descriptor_set_layout = device.create_descriptor_set_layout(
+        "descriptor_set_layout".into(),
+        DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&desc_layout_bindings)
+            .build(),
+    )?;
+
+    let descriptor_sets = descriptor_pool.allocate_descriptor_sets(
+        &device,
+        "descriptor_set".into(),
+        &[descriptor_set_layout.handle],
+    )?;
+
+    let white_image_view = white_image.create_simple_image_view(
+        &device,
+        "presentation_image_view".into(),
+        ImageViewType::TYPE_2D,
+        ImageSubresourceRange::builder()
+            .aspect_mask(ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(1)
+            .build(),
+        ComponentMapping::builder()
+            .r(ComponentSwizzle::IDENTITY)
+            .g(ComponentSwizzle::IDENTITY)
+            .b(ComponentSwizzle::IDENTITY)
+            .a(ComponentSwizzle::IDENTITY)
+            .build(),
+        ImageViewCreateFlags::empty(),
+    )?;
+
+    let sampler_create_info = SamplerCreateInfo::builder()
+        .mag_filter(Filter::LINEAR)
+        .min_filter(Filter::LINEAR)
+        .mipmap_mode(SamplerMipmapMode::LINEAR)
+        .address_mode_u(SamplerAddressMode::MIRRORED_REPEAT)
+        .address_mode_v(SamplerAddressMode::MIRRORED_REPEAT)
+        .address_mode_w(SamplerAddressMode::MIRRORED_REPEAT)
+        .max_anisotropy(1.0)
+        .border_color(BorderColor::FLOAT_OPAQUE_WHITE)
+        .compare_op(CompareOp::NEVER)
+        .build();
+
+    // TODO: Sampler abstraction
+    let sampler = unsafe { device.handle.create_sampler(&sampler_create_info, None)? };
+
+    unsafe {
+        device.handle.update_descriptor_sets(
+            &[WriteDescriptorSet::builder()
+                .dst_set(descriptor_sets[0].handle)
+                .dst_binding(0)
+                .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(&[DescriptorImageInfo::builder()
+                    .image_layout(ImageLayout::GENERAL)
+                    .image_view(white_image_view.handle)
+                    .sampler(sampler)
+                    .build()])
+                .build()],
+            &[],
+        );
+    }
+
+    let pipeline_layout = device.create_pipeline_layout(
+        "base_pipeline_layout".into(),
+        &[descriptor_set_layout.handle],
+    )?;
 
     let shader_stage_create_infos = [
         PipelineShaderStageCreateInfo::builder()
@@ -144,8 +233,8 @@ fn main() -> VkResult<()> {
         VertexInputAttributeDescription::builder()
             .location(1)
             .binding(0)
-            .offset(offset_of!(Vertex, color) as u32)
-            .format(Format::R32G32B32A32_SFLOAT)
+            .offset(offset_of!(Vertex, uv) as u32)
+            .format(Format::R32G32_SFLOAT)
             .build(),
     ];
 
@@ -328,9 +417,17 @@ fn main() -> VkResult<()> {
                     &render_pass_begin_info,
                     SubpassContents::INLINE,
                 );
+                vk_device.cmd_bind_descriptor_sets(
+                    command_buffer,
+                    PipelineBindPoint::GRAPHICS,
+                    pipeline_layout.handle,
+                    0,
+                    &[descriptor_sets[0].handle],
+                    &[],
+                );
                 vk_device.cmd_bind_pipeline(
                     command_buffer,
-                    vk::PipelineBindPoint::GRAPHICS,
+                    PipelineBindPoint::GRAPHICS,
                     graphic_pipeline.handle,
                 );
                 vk_device.cmd_set_viewport(command_buffer, 0, &viewports);
@@ -340,7 +437,7 @@ fn main() -> VkResult<()> {
                     command_buffer,
                     index_buffer.handle,
                     0,
-                    vk::IndexType::UINT32,
+                    IndexType::UINT32,
                 );
                 vk_device.cmd_draw_indexed(
                     command_buffer,
@@ -350,8 +447,6 @@ fn main() -> VkResult<()> {
                     0,
                     1,
                 );
-                // Or draw without the index buffer
-                // vk_device.cmd_draw(command_buffer, 3, 1, 0, 0);
                 vk_device.cmd_end_render_pass(command_buffer);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL
@@ -369,6 +464,8 @@ fn main() -> VkResult<()> {
         )?;
 
         device.handle.device_wait_idle()?;
+
+        device.handle.destroy_sampler(sampler, None);
     }
 
     let res: Vec<u8> = device.read_image_memory()?;

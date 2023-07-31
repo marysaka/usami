@@ -97,7 +97,7 @@ fn main() -> VkResult<()> {
     let frag_shader = device.create_shader("frag_shader".into(), &frag_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
-    let pipeline_layout = device.create_pipeline_layout("base_pipeline_layout".into())?;
+    let pipeline_layout = device.create_pipeline_layout("base_pipeline_layout".into(), &[])?;
 
     let shader_stage_create_infos = [
         PipelineShaderStageCreateInfo::builder()
