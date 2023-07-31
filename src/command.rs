@@ -1,11 +1,10 @@
 use ash::{
     prelude::*,
     vk::{
-        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo,
-        CommandBufferLevel, CommandPool,
-        CommandPoolCreateInfo, DependencyFlags, Handle,
-        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
-        ImageSubresourceRange, ObjectType, PipelineStageFlags,
+        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo, CommandBufferLevel,
+        CommandPool, CommandPoolCreateInfo, DependencyFlags, Handle, ImageAspectFlags, ImageLayout,
+        ImageMemoryBarrier, ImageSubresourceLayers, ImageSubresourceRange, ObjectType,
+        PipelineStageFlags,
     },
     Device,
 };

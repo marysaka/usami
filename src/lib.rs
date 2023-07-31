@@ -1,5 +1,6 @@
 pub mod buffer;
 pub mod command;
+pub mod descriptor;
 pub mod device;
 pub mod framebuffer;
 pub mod image;
@@ -12,6 +13,7 @@ pub mod utils;
 
 pub use crate::buffer::UsamiBuffer;
 pub use crate::command::{UsamiCommandBuffer, UsamiCommandPool};
+pub use crate::descriptor::{UsamiDescriptorPool, UsamiDescriptorSet};
 pub use crate::device::UsamiDevice;
 pub use crate::framebuffer::UsamiFramebuffer;
 pub use crate::image::{UsamiImage, UsamiImageView};
