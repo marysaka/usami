@@ -2,9 +2,9 @@ use ash::{
     prelude::*,
     vk::{
         BufferCreateFlags, BufferUsageFlags, ComponentMapping, Extent3D, Format, Handle, Image,
-        ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
-        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
-        SampleCountFlags, SharingMode,
+        ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling, ImageType,
+        ImageUsageFlags, ImageView, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType,
+        MemoryPropertyFlags, ObjectType, SampleCountFlags, SharingMode,
     },
     Device,
 };
@@ -127,6 +127,7 @@ impl UsamiDevice {
         height: u32,
         data: &[u8],
         usage: ImageUsageFlags,
+        layout: ImageLayout,
     ) -> VkResult<UsamiImage> {
         let temporary_buffer = self.create_buffer(
             format!("{name}_temp_buffer"),
@@ -153,7 +154,7 @@ impl UsamiDevice {
         let image =
             self.create_image(name, image_create_info, MemoryPropertyFlags::DEVICE_LOCAL)?;
 
-        self.copy_buffer_to_image(&temporary_buffer, &image)?;
+        self.copy_buffer_to_image(&temporary_buffer, &image, layout)?;
 
         Ok(image)
     }

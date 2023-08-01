@@ -105,7 +105,12 @@ impl UsamiDevice {
         Ok(shader)
     }
 
-    pub fn copy_buffer_to_image(&self, buffer: &UsamiBuffer, image: &UsamiImage) -> VkResult<()> {
+    pub fn copy_buffer_to_image(
+        &self,
+        buffer: &UsamiBuffer,
+        image: &UsamiImage,
+        new_layout: ImageLayout,
+    ) -> VkResult<()> {
         utils::record_and_execute_command_buffer(
             self,
             "b2i_cmd_buffer".into(),
@@ -162,7 +167,7 @@ impl UsamiDevice {
                         .src_access_mask(AccessFlags::TRANSFER_WRITE)
                         .dst_access_mask(AccessFlags::MEMORY_READ)
                         .old_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
-                        .new_layout(ImageLayout::GENERAL)
+                        .new_layout(new_layout)
                         .image(image.handle)
                         .subresource_range(image_subresource_range)
                         .build()],

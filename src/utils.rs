@@ -38,6 +38,10 @@ pub fn as_u32_vec(data: &[u8]) -> Vec<u32> {
     res
 }
 
+pub unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
+}
+
 pub fn record_command_buffer_with_image_dep<
     F: Fn(&UsamiDevice, CommandBuffer, &UsamiImage) -> ImageLayout,
 >(

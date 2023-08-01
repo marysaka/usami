@@ -54,6 +54,7 @@ impl UsamiInstance {
         engine_name: &str,
         api_version: u32,
         extensions: &[String],
+        enable_validation: bool,
     ) -> VkResult<Self> {
         let app_name = CString::new(app_name).expect("cannot create CString for application name");
         let engine_name = CString::new(engine_name).expect("cannot create CString for engine name");
@@ -74,12 +75,16 @@ impl UsamiInstance {
             .collect();
 
         let validation_layer = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
+        let validation_layers_slice = &[validation_layer.as_ptr()];
 
-        let create_info = vk::InstanceCreateInfo::builder()
+        let mut create_info_builder = vk::InstanceCreateInfo::builder()
             .application_info(&application_info)
-            .enabled_extension_names(&extensions_raw)
-            .enabled_layer_names(&[validation_layer.as_ptr()])
-            .build();
+            .enabled_extension_names(&extensions_raw);
+
+        if enable_validation {
+            create_info_builder = create_info_builder.enabled_layer_names(validation_layers_slice);
+        }
+        let create_info = create_info_builder.build();
 
         let vk_entry = unsafe { Entry::load().expect("Cannot load VK library") };
         let vk_instance = unsafe { vk_entry.create_instance(&create_info, None)? };

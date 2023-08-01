@@ -14,7 +14,7 @@ fn main() -> VkResult<()> {
     let width = 500;
     let height = 500;
 
-    let instance = UsamiInstance::new("simple", "usami", vk::API_VERSION_1_1, &extensions)?;
+    let instance = UsamiInstance::new("simple", "usami", vk::API_VERSION_1_1, &extensions, true)?;
     let device: UsamiDevice = UsamiDevice::new_by_filter(
         instance,
         &[],

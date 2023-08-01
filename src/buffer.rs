@@ -1,8 +1,8 @@
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MemoryPropertyFlags,
-        ObjectType, SharingMode,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MappedMemoryRange,
+        MemoryPropertyFlags, ObjectType, SharingMode,
     },
     Device,
 };
@@ -38,6 +38,30 @@ impl UsamiBuffer {
             device_memory,
         })
     }
+
+    pub fn copy_from_slice<T: Copy>(&self, data: &[T]) -> VkResult<()> {
+        unsafe {
+            let dst_slice =
+                std::slice::from_raw_parts_mut(self.device_memory.map()? as *mut T, data.len());
+
+            dst_slice.copy_from_slice(data);
+
+            self.device_memory.unmap();
+        }
+
+        Ok(())
+    }
+
+    pub fn flush(&self, offset: u64, size: u64) -> VkResult<()> {
+        unsafe {
+            self.device
+                .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
+                    .memory(self.device_memory.handle)
+                    .offset(offset)
+                    .size(size)
+                    .build()])
+        }
+    }
 }
 
 impl Drop for UsamiBuffer {
@@ -55,24 +79,40 @@ impl UsamiDevice {
         usage: BufferUsageFlags,
         data: &[T],
     ) -> VkResult<UsamiBuffer> {
+        let size = std::mem::size_of_val(data) as u64;
+        let buffer = self.create_buffer_with_size(
+            name,
+            flags,
+            sharing_mode,
+            usage,
+            size,
+            MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        buffer.copy_from_slice(data)?;
+        buffer.flush(0, size)?;
+
+        Ok(buffer)
+    }
+
+    pub fn create_buffer_with_size(
+        &self,
+        name: String,
+        flags: BufferCreateFlags,
+        sharing_mode: SharingMode,
+        usage: BufferUsageFlags,
+        size: u64,
+        memory_flags: MemoryPropertyFlags,
+    ) -> VkResult<UsamiBuffer> {
         let create_info = BufferCreateInfo::builder()
             .flags(flags)
             .sharing_mode(sharing_mode)
             .usage(usage)
-            .size(std::mem::size_of_val(data) as u64)
+            .size(size)
             .build();
-        let buffer = UsamiBuffer::new(self, create_info, MemoryPropertyFlags::HOST_VISIBLE)?;
+        let buffer = UsamiBuffer::new(self, create_info, memory_flags)?;
 
         self.set_debug_name(name, buffer.handle.as_raw(), ObjectType::BUFFER)?;
-
-        unsafe {
-            let dst_slice =
-                std::slice::from_raw_parts_mut(buffer.device_memory.map()? as *mut T, data.len());
-
-            dst_slice.copy_from_slice(data);
-
-            buffer.device_memory.unmap();
-        }
 
         Ok(buffer)
     }
