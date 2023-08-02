@@ -3,8 +3,8 @@ use std::ffi::c_void;
 use ash::{
     prelude::*,
     vk::{
-        self, DeviceMemory, MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags,
-        MemoryRequirements,
+        self, DeviceMemory, MappedMemoryRange, MemoryAllocateInfo, MemoryMapFlags,
+        MemoryPropertyFlags, MemoryRequirements,
     },
     Device,
 };
@@ -59,6 +59,28 @@ impl UsamiDeviceMemory {
         self.device.unmap_memory(self.handle)
     }
 
+    pub fn flush(&self, offset: u64, size: u64) -> VkResult<()> {
+        unsafe {
+            self.device
+                .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
+                    .memory(self.handle)
+                    .offset(offset)
+                    .size(size)
+                    .build()])
+        }
+    }
+
+    pub fn invalidate(&self, offset: u64, size: u64) -> VkResult<()> {
+        unsafe {
+            self.device
+                .invalidate_mapped_memory_ranges(&[MappedMemoryRange::builder()
+                    .memory(self.handle)
+                    .offset(offset)
+                    .size(size)
+                    .build()])
+        }
+    }
+
     pub fn read_to_vec(&self) -> VkResult<Vec<u8>> {
         let mut res = Vec::new();
 
@@ -68,6 +90,8 @@ impl UsamiDeviceMemory {
 
         unsafe {
             let ptr = self.map()?;
+
+            self.invalidate(0, allocation_size as u64)?;
 
             std::ptr::copy(ptr, res.as_mut_ptr() as *mut _, allocation_size);
 

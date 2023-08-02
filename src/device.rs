@@ -11,12 +11,12 @@ use ash::{
         DeviceQueueCreateInfo, Extent3D, Format, Handle, ImageAspectFlags, ImageCreateInfo,
         ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags,
         ImageViewType, MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
-        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, Queue, QueueFamilyProperties,
+        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, QueueFamilyProperties,
         SampleCountFlags, SharingMode,
     },
 };
 
-use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiImageView, UsamiInstance};
+use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiImageView, UsamiInstance, UsamiQueue};
 
 pub struct UsamiPhysicalDevice {
     pub handle: PhysicalDevice,
@@ -35,7 +35,6 @@ pub struct UsamiDevice {
     pub handle: ash::Device,
     pub command_pool: ManuallyDrop<UsamiCommandPool>,
     pub vk_queue_index: u32,
-    pub vk_queue: Queue,
     pub presentation_image: MaybeUninit<UsamiImage>,
     pub presentation_image_view: MaybeUninit<UsamiImageView>,
     pub presentation_buffer_readback: MaybeUninit<UsamiBuffer>,
@@ -103,8 +102,6 @@ impl UsamiDevice {
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
-        let vk_queue = unsafe { handle.get_device_queue(vk_queue_index, 0) };
-
         let command_pool = UsamiCommandPool::new(
             &handle,
             CommandPoolCreateInfo::builder()
@@ -119,7 +116,6 @@ impl UsamiDevice {
             physical_device,
             handle,
             vk_queue_index,
-            vk_queue,
             command_pool: ManuallyDrop::new(command_pool),
             presentation_image: MaybeUninit::uninit(),
             presentation_image_view: MaybeUninit::uninit(),
@@ -137,7 +133,7 @@ impl UsamiDevice {
             .mip_levels(1)
             .array_layers(1)
             .samples(SampleCountFlags::TYPE_1)
-            .tiling(ImageTiling::LINEAR)
+            .tiling(ImageTiling::OPTIMAL)
             .usage(
                 ImageUsageFlags::COLOR_ATTACHMENT
                     | ImageUsageFlags::SAMPLED
@@ -158,9 +154,9 @@ impl UsamiDevice {
             ImageSubresourceRange::builder()
                 .aspect_mask(ImageAspectFlags::COLOR)
                 .base_mip_level(0)
-                .level_count(1)
+                .level_count(presentation_image_info.mip_levels)
                 .base_array_layer(0)
-                .layer_count(1)
+                .layer_count(presentation_image_info.array_layers)
                 .build(),
             ComponentMapping::builder()
                 .r(ComponentSwizzle::IDENTITY)
@@ -211,6 +207,10 @@ impl UsamiDevice {
 
     pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
         unsafe { self.presentation_buffer_readback.assume_init_ref() }
+    }
+
+    pub fn get_queue(&self) -> VkResult<UsamiQueue> {
+        self.get_device_queue("queue".into(), self.vk_queue_index, 0)
     }
 
     pub fn set_debug_name(

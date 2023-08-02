@@ -7,20 +7,20 @@ use ash::{
         AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferUsageFlags,
         ClearValue, ColorComponentFlags, CommandBufferLevel, CompareOp, ComponentMapping,
         ComponentSwizzle, DescriptorImageInfo, DescriptorPoolCreateInfo,
-        DescriptorSetLayoutCreateInfo, DescriptorType, DynamicState, Extent2D, Fence, Filter,
-        Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags,
-        ImageLayout, ImageSubresourceRange, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        IndexType, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-        PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-        PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags, Rect2D,
-        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, SamplerAddressMode,
-        SamplerCreateInfo, SamplerMipmapMode, ShaderStageFlags, SharingMode, StencilOp,
-        StencilOpState, SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
-        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
-        WriteDescriptorSet,
+        DescriptorSetLayoutCreateInfo, DescriptorType, DynamicState, Extent2D, FenceCreateFlags,
+        Filter, Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo,
+        ImageAspectFlags, ImageLayout, ImageSubresourceRange, ImageUsageFlags,
+        ImageViewCreateFlags, ImageViewType, IndexType, LogicOp, PipelineBindPoint, PipelineCache,
+        PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+        PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
+        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
+        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
+        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
+        PrimitiveTopology, QueueFlags, Rect2D, RenderPassBeginInfo, RenderPassCreateInfo,
+        SampleCountFlags, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode,
+        ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo, SubpassContents,
+        SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
+        VertexInputBindingDescription, VertexInputRate, Viewport, WriteDescriptorSet,
     },
 };
 use image::EncodableLayout;
@@ -389,7 +389,7 @@ fn main() -> VkResult<()> {
 
     usami::utils::record_command_buffer_with_image_dep(
         &device,
-        command_buffers[0].handle,
+        &command_buffers[0],
         device.presentation_image(),
         |device, command_buffer, _image| {
             let vk_device = &device.handle;
@@ -414,12 +414,12 @@ fn main() -> VkResult<()> {
 
             unsafe {
                 vk_device.cmd_begin_render_pass(
-                    command_buffer,
+                    command_buffer.handle,
                     &render_pass_begin_info,
                     SubpassContents::INLINE,
                 );
                 vk_device.cmd_bind_descriptor_sets(
-                    command_buffer,
+                    command_buffer.handle,
                     PipelineBindPoint::GRAPHICS,
                     pipeline_layout.handle,
                     0,
@@ -427,45 +427,51 @@ fn main() -> VkResult<()> {
                     &[],
                 );
                 vk_device.cmd_bind_pipeline(
-                    command_buffer,
+                    command_buffer.handle,
                     PipelineBindPoint::GRAPHICS,
                     graphic_pipeline.handle,
                 );
-                vk_device.cmd_set_viewport(command_buffer, 0, &viewports);
-                vk_device.cmd_set_scissor(command_buffer, 0, &scissors);
-                vk_device.cmd_bind_vertex_buffers(command_buffer, 0, &[vbo_buffer.handle], &[0]);
+                vk_device.cmd_set_viewport(command_buffer.handle, 0, &viewports);
+                vk_device.cmd_set_scissor(command_buffer.handle, 0, &scissors);
+                vk_device.cmd_bind_vertex_buffers(
+                    command_buffer.handle,
+                    0,
+                    &[vbo_buffer.handle],
+                    &[0],
+                );
                 vk_device.cmd_bind_index_buffer(
-                    command_buffer,
+                    command_buffer.handle,
                     index_buffer.handle,
                     0,
                     IndexType::UINT32,
                 );
                 vk_device.cmd_draw_indexed(
-                    command_buffer,
+                    command_buffer.handle,
                     index_buffer_data.len() as u32,
                     1,
                     0,
                     0,
                     1,
                 );
-                vk_device.cmd_end_render_pass(command_buffer);
+                vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL
             }
         },
     )?;
 
+    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
+
+    device.get_queue()?.submit(
+        &[SubmitInfo::builder()
+            .command_buffers(&[command_buffers[0].handle])
+            .build()],
+        &fence,
+    )?;
+    fence.wait(u64::MAX)?;
+    fence.reset()?;
+
     unsafe {
-        device.handle.queue_submit(
-            device.vk_queue,
-            &[SubmitInfo::builder()
-                .command_buffers(&[command_buffers[0].handle])
-                .build()],
-            Fence::null(),
-        )?;
-
-        device.handle.device_wait_idle()?;
-
         device.handle.destroy_sampler(sampler, None);
     }
 

@@ -1,7 +1,7 @@
 use ash::{
     prelude::VkResult,
     vk::{
-        self, AccessFlags, ClearColorValue, CommandBufferLevel, DependencyFlags, Fence,
+        self, AccessFlags, ClearColorValue, CommandBufferLevel, DependencyFlags, FenceCreateFlags,
         ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange,
         PipelineStageFlags, SubmitInfo,
     },
@@ -45,7 +45,7 @@ fn main() -> VkResult<()> {
 
     usami::utils::record_command_buffer_with_image_dep(
         &device,
-        command_buffers[0].handle,
+        &command_buffers[0],
         device.presentation_image(),
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
@@ -58,7 +58,7 @@ fn main() -> VkResult<()> {
 
             unsafe {
                 device.handle.cmd_pipeline_barrier(
-                    command_buffer,
+                    command_buffer.handle,
                     PipelineStageFlags::TRANSFER,
                     PipelineStageFlags::TRANSFER,
                     DependencyFlags::empty(),
@@ -80,7 +80,7 @@ fn main() -> VkResult<()> {
                 clear_color_value.float32 = [0.6f32, 0.5f32, 1.0f32, 1.0f32];
 
                 device.handle.cmd_clear_color_image(
-                    command_buffer,
+                    command_buffer.handle,
                     image.handle,
                     ImageLayout::TRANSFER_DST_OPTIMAL,
                     &clear_color_value,
@@ -92,17 +92,16 @@ fn main() -> VkResult<()> {
         },
     )?;
 
-    unsafe {
-        device.handle.queue_submit(
-            device.vk_queue,
-            &[SubmitInfo::builder()
-                .command_buffers(&[command_buffers[0].handle])
-                .build()],
-            Fence::null(),
-        )?;
+    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
 
-        device.handle.device_wait_idle()?;
-    }
+    device.get_queue()?.submit(
+        &[SubmitInfo::builder()
+            .command_buffers(&[command_buffers[0].handle])
+            .build()],
+        &fence,
+    )?;
+    fence.wait(u64::MAX)?;
+    fence.reset()?;
 
     let res: Vec<u8> = device.read_image_memory()?;
 

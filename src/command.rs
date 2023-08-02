@@ -1,8 +1,9 @@
 use ash::{
     prelude::*,
     vk::{
-        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo, CommandBufferLevel,
-        CommandPool, CommandPoolCreateInfo, DependencyFlags, Handle, ImageAspectFlags, ImageLayout,
+        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo,
+        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsageFlags, CommandPool,
+        CommandPoolCreateInfo, DependencyFlags, Handle, ImageAspectFlags, ImageLayout,
         ImageMemoryBarrier, ImageSubresourceLayers, ImageSubresourceRange, ObjectType,
         PipelineStageFlags,
     },
@@ -80,6 +81,26 @@ impl UsamiCommandBuffer {
                 handle: *handle,
             })
             .collect())
+    }
+
+    pub fn record<F: Fn(&UsamiDevice, &UsamiCommandBuffer) -> VkResult<()>>(
+        &self,
+        device: &UsamiDevice,
+        flags: CommandBufferUsageFlags,
+        callback: F,
+    ) -> VkResult<()> {
+        unsafe {
+            self.device.begin_command_buffer(
+                self.handle,
+                &CommandBufferBeginInfo::builder().flags(flags).build(),
+            )?;
+
+            callback(device, self)?;
+
+            self.device.end_command_buffer(self.handle)?;
+        }
+
+        Ok(())
     }
 }
 

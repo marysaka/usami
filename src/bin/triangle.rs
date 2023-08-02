@@ -5,9 +5,9 @@ use ash::{
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
-        ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D, Fence, Format,
-        FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp,
-        PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D,
+        FenceCreateFlags, Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo,
+        ImageLayout, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
         PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
         PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
@@ -283,7 +283,7 @@ fn main() -> VkResult<()> {
 
     usami::utils::record_command_buffer_with_image_dep(
         &device,
-        command_buffers[0].handle,
+        &command_buffers[0],
         device.presentation_image(),
         |device, command_buffer, _image| {
             let vk_device = &device.handle;
@@ -308,52 +308,54 @@ fn main() -> VkResult<()> {
 
             unsafe {
                 vk_device.cmd_begin_render_pass(
-                    command_buffer,
+                    command_buffer.handle,
                     &render_pass_begin_info,
                     SubpassContents::INLINE,
                 );
                 vk_device.cmd_bind_pipeline(
-                    command_buffer,
+                    command_buffer.handle,
                     vk::PipelineBindPoint::GRAPHICS,
                     graphic_pipeline.handle,
                 );
-                vk_device.cmd_set_viewport(command_buffer, 0, &viewports);
-                vk_device.cmd_set_scissor(command_buffer, 0, &scissors);
-                vk_device.cmd_bind_vertex_buffers(command_buffer, 0, &[vbo_buffer.handle], &[0]);
+                vk_device.cmd_set_viewport(command_buffer.handle, 0, &viewports);
+                vk_device.cmd_set_scissor(command_buffer.handle, 0, &scissors);
+                vk_device.cmd_bind_vertex_buffers(
+                    command_buffer.handle,
+                    0,
+                    &[vbo_buffer.handle],
+                    &[0],
+                );
                 vk_device.cmd_bind_index_buffer(
-                    command_buffer,
+                    command_buffer.handle,
                     index_buffer.handle,
                     0,
                     vk::IndexType::UINT32,
                 );
                 vk_device.cmd_draw_indexed(
-                    command_buffer,
+                    command_buffer.handle,
                     index_buffer_data.len() as u32,
                     1,
                     0,
                     0,
                     1,
                 );
-                // Or draw without the index buffer
-                // vk_device.cmd_draw(command_buffer, 3, 1, 0, 0);
-                vk_device.cmd_end_render_pass(command_buffer);
+                vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL
             }
         },
     )?;
 
-    unsafe {
-        device.handle.queue_submit(
-            device.vk_queue,
-            &[SubmitInfo::builder()
-                .command_buffers(&[command_buffers[0].handle])
-                .build()],
-            Fence::null(),
-        )?;
+    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
 
-        device.handle.device_wait_idle()?;
-    }
+    device.get_queue()?.submit(
+        &[SubmitInfo::builder()
+            .command_buffers(&[command_buffers[0].handle])
+            .build()],
+        &fence,
+    )?;
+    fence.wait(u64::MAX)?;
+    fence.reset()?;
 
     let res: Vec<u8> = device.read_image_memory()?;
 

@@ -1,8 +1,8 @@
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MappedMemoryRange,
-        MemoryPropertyFlags, ObjectType, SharingMode,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MemoryPropertyFlags,
+        ObjectType, SharingMode,
     },
     Device,
 };
@@ -46,21 +46,13 @@ impl UsamiBuffer {
 
             dst_slice.copy_from_slice(data);
 
+            self.device_memory
+                .flush(0, std::mem::size_of_val(dst_slice) as u64)?;
+
             self.device_memory.unmap();
         }
 
         Ok(())
-    }
-
-    pub fn flush(&self, offset: u64, size: u64) -> VkResult<()> {
-        unsafe {
-            self.device
-                .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
-                    .memory(self.device_memory.handle)
-                    .offset(offset)
-                    .size(size)
-                    .build()])
-        }
     }
 }
 
@@ -90,7 +82,6 @@ impl UsamiDevice {
         )?;
 
         buffer.copy_from_slice(data)?;
-        buffer.flush(0, size)?;
 
         Ok(buffer)
     }
