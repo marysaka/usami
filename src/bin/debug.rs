@@ -4,15 +4,14 @@ use ash::{
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
-        AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferImageCopy,
-        BufferUsageFlags, ColorComponentFlags, CommandBufferLevel, CommandBufferUsageFlags,
-        CompareOp, ComponentMapping, ComponentSwizzle, DependencyFlags, DescriptorBufferInfo,
-        DescriptorImageInfo, DescriptorPoolCreateInfo, DescriptorPoolSize,
-        DescriptorSetLayoutCreateInfo, DescriptorType, Extent2D, Extent3D, FenceCreateFlags,
-        Filter, Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo,
-        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
+        AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferUsageFlags,
+        ColorComponentFlags, CommandBufferLevel, CommandBufferUsageFlags, CompareOp,
+        ComponentMapping, ComponentSwizzle, DescriptorBufferInfo, DescriptorImageInfo,
+        DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSetLayoutCreateInfo,
+        DescriptorType, Extent2D, FenceCreateFlags, Filter, Format, FramebufferCreateInfo,
+        FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags, ImageLayout,
         ImageSubresourceRange, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType,
-        LogicOp, Offset3D, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
         PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
         PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
@@ -607,68 +606,31 @@ fn main() -> VkResult<()> {
                 );
                 vk_device.cmd_end_render_pass(command_buffer.handle);
 
-                let image_subresource_range = ImageSubresourceRange::builder()
-                    .base_array_layer(0)
-                    .layer_count(image.create_info.array_layers)
-                    .base_mip_level(0)
-                    .level_count(image.create_info.mip_levels)
-                    .aspect_mask(ImageAspectFlags::COLOR)
-                    .build();
+                command_buffer.copy_image_to_buffer(
+                    device.presentation_image(),
+                    device.presentation_buffer_readback(),
+                    Extent2D {
+                        width: device.width,
+                        height: device.height,
+                    },
+                    AccessFlags::COLOR_ATTACHMENT_WRITE,
+                    ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    1,
+                    ImageAspectFlags::COLOR,
+                    ImageAspectFlags::COLOR,
+                    PipelineStageFlags::ALL_COMMANDS,
+                )?;
 
-                device.handle.cmd_pipeline_barrier(
-                    command_buffer.handle,
-                    PipelineStageFlags::BOTTOM_OF_PIPE,
-                    PipelineStageFlags::TRANSFER,
-                    DependencyFlags::empty(),
-                    &[],
-                    &[],
-                    &[ImageMemoryBarrier::builder()
-                        .src_access_mask(AccessFlags::MEMORY_WRITE)
-                        .dst_access_mask(AccessFlags::TRANSFER_READ)
-                        .old_layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                        .new_layout(ImageLayout::TRANSFER_SRC_OPTIMAL)
-                        .image(device.presentation_image().handle)
-                        .subresource_range(image_subresource_range)
-                        .build()],
-                );
-
-                device.handle.cmd_copy_image_to_buffer(
-                    command_buffer.handle,
-                    device.presentation_image().handle,
-                    ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    device.presentation_buffer_readback().handle,
-                    &[BufferImageCopy::builder()
-                        .image_offset(Offset3D::builder().x(0).y(0).z(0).build())
-                        .image_subresource(
-                            ImageSubresourceLayers::builder()
-                                .aspect_mask(ImageAspectFlags::COLOR)
-                                .layer_count(1)
-                                .build(),
-                        )
-                        .image_extent(Extent3D {
-                            width: device.width,
-                            height: device.height,
-                            depth: 1,
-                        })
-                        .build()],
-                );
-
-                device.handle.cmd_pipeline_barrier(
-                    command_buffer.handle,
+                command_buffer.add_image_barrier(
+                    device.presentation_image(),
+                    None,
                     PipelineStageFlags::TRANSFER,
                     PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                    DependencyFlags::empty(),
-                    &[],
-                    &[],
-                    &[ImageMemoryBarrier::builder()
-                        .src_access_mask(AccessFlags::TRANSFER_READ)
-                        .dst_access_mask(AccessFlags::COLOR_ATTACHMENT_WRITE)
-                        .old_layout(ImageLayout::TRANSFER_SRC_OPTIMAL)
-                        .new_layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                        .image(device.presentation_image().handle)
-                        .subresource_range(image_subresource_range)
-                        .build()],
-                );
+                    AccessFlags::TRANSFER_READ,
+                    AccessFlags::COLOR_ATTACHMENT_WRITE,
+                    ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                )?;
             }
 
             Ok(())

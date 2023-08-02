@@ -100,6 +100,7 @@ impl UsamiDevice {
             .sharing_mode(sharing_mode)
             .usage(usage)
             .size(size)
+            .queue_family_indices(&[self.vk_queue_index])
             .build();
         let buffer = UsamiBuffer::new(self, create_info, memory_flags)?;
 

@@ -47,6 +47,7 @@ fn main() -> VkResult<()> {
         &device,
         &command_buffers[0],
         device.presentation_image(),
+        device.presentation_buffer_readback(),
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
                 .base_array_layer(0)

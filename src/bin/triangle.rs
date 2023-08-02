@@ -285,6 +285,7 @@ fn main() -> VkResult<()> {
         &device,
         &command_buffers[0],
         device.presentation_image(),
+        device.presentation_buffer_readback(),
         |device, command_buffer, _image| {
             let vk_device = &device.handle;
             let clear_values = [ClearValue {

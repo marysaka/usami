@@ -1,11 +1,11 @@
 use ash::{
     prelude::*,
     vk::{
-        AccessFlags, BufferImageCopy, CommandBuffer, CommandBufferAllocateInfo,
-        CommandBufferBeginInfo, CommandBufferLevel, CommandBufferUsageFlags, CommandPool,
-        CommandPoolCreateInfo, DependencyFlags, Handle, ImageAspectFlags, ImageLayout,
-        ImageMemoryBarrier, ImageSubresourceLayers, ImageSubresourceRange, ObjectType,
-        PipelineStageFlags,
+        self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, CommandBuffer,
+        CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel,
+        CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, Extent2D,
+        Handle, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
+        ImageSubresourceRange, ObjectType, PipelineStageFlags,
     },
     Device,
 };
@@ -102,6 +102,219 @@ impl UsamiCommandBuffer {
 
         Ok(())
     }
+
+    pub fn add_image_barrier(
+        &self,
+        image: &UsamiImage,
+        image_subresource_range_opt: Option<ImageSubresourceRange>,
+        src_stage_mask: PipelineStageFlags,
+        dst_stage_mask: PipelineStageFlags,
+        src_access_mask: AccessFlags,
+        dst_access_mask: AccessFlags,
+        old_layout: ImageLayout,
+        new_layout: ImageLayout,
+    ) -> VkResult<()> {
+        let image_subresource_range = image_subresource_range_opt.unwrap_or(
+            ImageSubresourceRange::builder()
+                .base_array_layer(0)
+                .layer_count(1)
+                .base_mip_level(0)
+                .level_count(1)
+                .aspect_mask(ImageAspectFlags::COLOR)
+                .build(),
+        );
+
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                self.handle,
+                src_stage_mask,
+                dst_stage_mask,
+                DependencyFlags::empty(),
+                &[],
+                &[],
+                &[ImageMemoryBarrier::builder()
+                    .src_access_mask(src_access_mask)
+                    .dst_access_mask(dst_access_mask)
+                    .old_layout(old_layout)
+                    .new_layout(new_layout)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .image(image.handle)
+                    .subresource_range(image_subresource_range)
+                    .build()],
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn add_buffer_barrier(
+        &self,
+        buffer: &UsamiBuffer,
+        src_stage_mask: PipelineStageFlags,
+        dst_stage_mask: PipelineStageFlags,
+        src_access_mask: AccessFlags,
+        dst_access_mask: AccessFlags,
+        offset: u64,
+        size: u64,
+    ) -> VkResult<()> {
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                self.handle,
+                src_stage_mask,
+                dst_stage_mask,
+                DependencyFlags::empty(),
+                &[],
+                &[BufferMemoryBarrier::builder()
+                    .src_access_mask(src_access_mask)
+                    .dst_access_mask(dst_access_mask)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .buffer(buffer.handle)
+                    .offset(offset)
+                    .size(size)
+                    .build()],
+                &[],
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn copy_buffer_to_image(
+        &self,
+        buffer: &UsamiBuffer,
+        buffer_size: u64,
+        copy_regions: &[BufferImageCopy],
+        image_aspect_flags: ImageAspectFlags,
+        mip_levels: u32,
+        array_layers: u32,
+        dest_image: &UsamiImage,
+        dest_image_layout: ImageLayout,
+        dest_image_dst_stage_flags: PipelineStageFlags,
+        dest_image_dst_access_mask: AccessFlags,
+        base_mip_level: u32,
+    ) -> VkResult<()> {
+        let subresource_range = ImageSubresourceRange::builder()
+            .aspect_mask(image_aspect_flags)
+            .base_mip_level(base_mip_level)
+            .level_count(mip_levels)
+            .base_array_layer(0)
+            .layer_count(array_layers)
+            .build();
+
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                self.handle,
+                PipelineStageFlags::HOST,
+                PipelineStageFlags::TRANSFER,
+                DependencyFlags::empty(),
+                &[],
+                &[BufferMemoryBarrier::builder()
+                    .src_access_mask(AccessFlags::HOST_WRITE)
+                    .dst_access_mask(AccessFlags::TRANSFER_READ)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .buffer(buffer.handle)
+                    .offset(0)
+                    .size(buffer_size)
+                    .build()],
+                &[ImageMemoryBarrier::builder()
+                    .src_access_mask(AccessFlags::empty())
+                    .dst_access_mask(AccessFlags::TRANSFER_WRITE)
+                    .old_layout(ImageLayout::UNDEFINED)
+                    .new_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .image(dest_image.handle)
+                    .subresource_range(subresource_range)
+                    .build()],
+            );
+
+            self.device.cmd_copy_buffer_to_image(
+                self.handle,
+                buffer.handle,
+                dest_image.handle,
+                ImageLayout::TRANSFER_DST_OPTIMAL,
+                copy_regions,
+            );
+
+            self.add_image_barrier(
+                dest_image,
+                Some(subresource_range),
+                PipelineStageFlags::TRANSFER,
+                dest_image_dst_stage_flags,
+                AccessFlags::TRANSFER_WRITE,
+                dest_image_dst_access_mask,
+                ImageLayout::TRANSFER_DST_OPTIMAL,
+                dest_image_layout,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    pub fn copy_image_to_buffer(
+        &self,
+        image: &UsamiImage,
+        buffer: &UsamiBuffer,
+        size: Extent2D,
+        src_access_mask: AccessFlags,
+        old_layout: ImageLayout,
+        layer_count: u32,
+        barrier_aspect: ImageAspectFlags,
+        copy_aspect: ImageAspectFlags,
+        src_stage_mask: PipelineStageFlags,
+    ) -> VkResult<()> {
+        let image_subresource_range = ImageSubresourceRange::builder()
+            .base_array_layer(0)
+            .layer_count(layer_count)
+            .base_mip_level(0)
+            .level_count(1)
+            .aspect_mask(barrier_aspect)
+            .build();
+
+        self.add_image_barrier(
+            image,
+            Some(image_subresource_range),
+            src_stage_mask,
+            PipelineStageFlags::TRANSFER,
+            src_access_mask,
+            AccessFlags::TRANSFER_READ,
+            old_layout,
+            ImageLayout::TRANSFER_SRC_OPTIMAL,
+        )?;
+
+        unsafe {
+            self.device.cmd_copy_image_to_buffer(
+                self.handle,
+                image.handle,
+                ImageLayout::TRANSFER_SRC_OPTIMAL,
+                buffer.handle,
+                &[BufferImageCopy::builder()
+                    .image_subresource(
+                        ImageSubresourceLayers::builder()
+                            .aspect_mask(copy_aspect)
+                            .layer_count(layer_count)
+                            .build(),
+                    )
+                    .image_extent(size.into())
+                    .build()],
+            );
+        }
+
+        self.add_buffer_barrier(
+            buffer,
+            PipelineStageFlags::TRANSFER,
+            PipelineStageFlags::HOST,
+            AccessFlags::TRANSFER_WRITE,
+            AccessFlags::HOST_READ,
+            0,
+            vk::WHOLE_SIZE,
+        )?;
+
+        Ok(())
+    }
 }
 
 impl Drop for UsamiCommandBuffer {
@@ -135,64 +348,30 @@ impl UsamiDevice {
         utils::record_and_execute_command_buffer(
             self,
             "b2i_cmd_buffer".into(),
-            |device, command_buffer| unsafe {
-                let image_subresource_range = ImageSubresourceRange::builder()
-                    .base_array_layer(0)
-                    .layer_count(image.create_info.array_layers)
-                    .base_mip_level(0)
-                    .level_count(image.create_info.mip_levels)
-                    .aspect_mask(ImageAspectFlags::COLOR)
-                    .build();
-
-                device.handle.cmd_pipeline_barrier(
-                    command_buffer.handle,
-                    PipelineStageFlags::TRANSFER,
-                    PipelineStageFlags::TRANSFER,
-                    DependencyFlags::empty(),
-                    &[],
-                    &[],
-                    &[ImageMemoryBarrier::builder()
-                        .src_access_mask(AccessFlags::empty())
-                        .dst_access_mask(AccessFlags::TRANSFER_WRITE)
-                        .old_layout(ImageLayout::UNDEFINED)
-                        .new_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
-                        .image(image.handle)
-                        .subresource_range(image_subresource_range)
-                        .build()],
-                );
-
-                device.handle.cmd_copy_buffer_to_image(
-                    command_buffer.handle,
-                    buffer.handle,
-                    image.handle,
-                    ImageLayout::TRANSFER_DST_OPTIMAL,
+            |_, command_buffer| {
+                command_buffer.copy_buffer_to_image(
+                    buffer,
+                    vk::WHOLE_SIZE,
                     &[BufferImageCopy::builder()
                         .image_subresource(
                             ImageSubresourceLayers::builder()
                                 .aspect_mask(ImageAspectFlags::COLOR)
-                                .layer_count(1)
+                                .mip_level(0)
+                                .base_array_layer(0)
+                                .layer_count(image.create_info.array_layers)
                                 .build(),
                         )
                         .image_extent(image.create_info.extent)
                         .build()],
-                );
-
-                device.handle.cmd_pipeline_barrier(
-                    command_buffer.handle,
-                    PipelineStageFlags::TRANSFER,
-                    PipelineStageFlags::TRANSFER,
-                    DependencyFlags::empty(),
-                    &[],
-                    &[],
-                    &[ImageMemoryBarrier::builder()
-                        .src_access_mask(AccessFlags::TRANSFER_WRITE)
-                        .dst_access_mask(AccessFlags::MEMORY_READ)
-                        .old_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
-                        .new_layout(new_layout)
-                        .image(image.handle)
-                        .subresource_range(image_subresource_range)
-                        .build()],
-                );
+                    ImageAspectFlags::COLOR,
+                    image.create_info.mip_levels,
+                    image.create_info.array_layers,
+                    image,
+                    new_layout,
+                    PipelineStageFlags::FRAGMENT_SHADER,
+                    AccessFlags::SHADER_READ,
+                    0,
+                )?;
 
                 Ok(())
             },

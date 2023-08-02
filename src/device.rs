@@ -6,13 +6,12 @@ use std::{
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, CommandPoolCreateInfo,
-        ComponentMapping, ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo,
-        DeviceQueueCreateInfo, Extent3D, Format, Handle, ImageAspectFlags, ImageCreateInfo,
-        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags,
-        ImageViewType, MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
-        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, QueueFamilyProperties,
-        SampleCountFlags, SharingMode,
+        BufferCreateFlags, BufferUsageFlags, CommandPoolCreateInfo, ComponentMapping,
+        ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
+        Extent3D, Format, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling,
+        ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags,
+        ObjectType, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
+        PhysicalDeviceProperties, QueueFamilyProperties, SampleCountFlags, SharingMode,
     },
 };
 
@@ -145,7 +144,7 @@ impl UsamiDevice {
         result.presentation_image.write(result.create_image(
             "presentation_image".into(),
             presentation_image_info,
-            MemoryPropertyFlags::HOST_VISIBLE,
+            MemoryPropertyFlags::empty(),
         )?);
         let presentation_image_view = result.presentation_image().create_simple_image_view(
             &result,
@@ -170,24 +169,13 @@ impl UsamiDevice {
             .presentation_image_view
             .write(presentation_image_view);
 
-        let presentation_buffer_readback_info = BufferCreateInfo::builder()
-            .flags(BufferCreateFlags::empty())
-            .sharing_mode(SharingMode::EXCLUSIVE)
-            .usage(BufferUsageFlags::TRANSFER_DST)
-            .queue_family_indices(&[vk_queue_index])
-            .size(u64::from(width * height * 4))
-            .build();
-
-        let presentation_buffer_readback = UsamiBuffer::new(
-            &result,
-            presentation_buffer_readback_info,
-            MemoryPropertyFlags::HOST_VISIBLE,
-        )?;
-
-        result.set_debug_name(
+        let presentation_buffer_readback = result.create_buffer_with_size(
             "presentation_buffer_readback".into(),
-            presentation_buffer_readback.handle.as_raw(),
-            ObjectType::BUFFER,
+            BufferCreateFlags::empty(),
+            SharingMode::EXCLUSIVE,
+            BufferUsageFlags::TRANSFER_DST,
+            u64::from(width * height * 4),
+            MemoryPropertyFlags::HOST_VISIBLE,
         )?;
 
         result

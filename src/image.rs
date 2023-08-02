@@ -129,14 +129,6 @@ impl UsamiDevice {
         usage: ImageUsageFlags,
         layout: ImageLayout,
     ) -> VkResult<UsamiImage> {
-        let temporary_buffer = self.create_buffer(
-            format!("{name}_temp_buffer"),
-            BufferCreateFlags::empty(),
-            SharingMode::EXCLUSIVE,
-            BufferUsageFlags::TRANSFER_SRC,
-            data,
-        )?;
-
         let image_create_info = ImageCreateInfo::builder()
             .image_type(ImageType::TYPE_2D)
             .format(Format::R8G8B8A8_UNORM)
@@ -147,12 +139,25 @@ impl UsamiDevice {
             })
             .mip_levels(1)
             .array_layers(1)
+            .initial_layout(ImageLayout::UNDEFINED)
             .samples(SampleCountFlags::TYPE_1)
             .tiling(ImageTiling::OPTIMAL)
             .usage(usage | ImageUsageFlags::TRANSFER_DST)
+            .queue_family_indices(&[self.vk_queue_index])
             .build();
-        let image =
-            self.create_image(name, image_create_info, MemoryPropertyFlags::DEVICE_LOCAL)?;
+        let image = self.create_image(
+            name.clone(),
+            image_create_info,
+            MemoryPropertyFlags::empty(),
+        )?;
+
+        let temporary_buffer = self.create_buffer(
+            format!("{name}_temp_buffer"),
+            BufferCreateFlags::empty(),
+            SharingMode::EXCLUSIVE,
+            BufferUsageFlags::TRANSFER_SRC,
+            data,
+        )?;
 
         self.copy_buffer_to_image(&temporary_buffer, &image, layout)?;
 

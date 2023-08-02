@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 pub mod buffer;
 pub mod command;
 pub mod descriptor;
