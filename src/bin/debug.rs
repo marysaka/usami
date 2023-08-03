@@ -4,26 +4,26 @@ use ash::{
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
-        AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferUsageFlags,
-        ColorComponentFlags, CommandBufferLevel, CommandBufferUsageFlags, CompareOp,
-        ComponentMapping, ComponentSwizzle, DescriptorBufferInfo, DescriptorImageInfo,
+        AttachmentStoreOp, BlendFactor, BlendOp, BorderColor, BufferCreateFlags, BufferImageCopy,
+        BufferUsageFlags, ColorComponentFlags, CommandBufferLevel, CommandBufferUsageFlags,
+        CompareOp, ComponentMapping, ComponentSwizzle, DescriptorBufferInfo, DescriptorImageInfo,
         DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSetLayoutCreateInfo,
-        DescriptorType, Extent2D, FenceCreateFlags, Filter, Format, FramebufferCreateInfo,
-        FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags, ImageLayout,
-        ImageSubresourceRange, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType,
-        LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
-        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
-        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
-        PrimitiveTopology, QueueFlags, Rect2D, RenderPassBeginInfo, RenderPassCreateInfo,
-        SampleCountFlags, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode,
-        ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo, SubpassContents,
-        SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
-        VertexInputBindingDescription, VertexInputRate, Viewport, WriteDescriptorSet,
+        DescriptorType, Extent2D, Extent3D, FenceCreateFlags, Filter, Format,
+        FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags,
+        ImageLayout, ImageSubresourceLayers, ImageSubresourceRange, ImageUsageFlags,
+        ImageViewCreateFlags, ImageViewType, IndexType, LogicOp, PipelineBindPoint, PipelineCache,
+        PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+        PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
+        PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
+        PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
+        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags, Rect2D,
+        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, SamplerAddressMode,
+        SamplerCreateInfo, SamplerMipmapMode, ShaderStageFlags, SharingMode, StencilOp,
+        StencilOpState, SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
+        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
+        WriteDescriptorSet,
     },
 };
-use image::EncodableLayout;
 use usami::{utils, UsamiDevice, UsamiInstance};
 
 #[derive(Clone, Debug, Copy)]
@@ -80,7 +80,7 @@ fn main() -> VkResult<()> {
     let width = image_buffer.width();
     let height = image_buffer.height();
 
-    let instance = UsamiInstance::new("triangle", "usami", vk::API_VERSION_1_1, &extensions, true)?;
+    let instance = UsamiInstance::new("debug", "usami", vk::API_VERSION_1_1, &extensions, true)?;
     let device: UsamiDevice = UsamiDevice::new_by_filter(
         instance,
         &[],
@@ -102,11 +102,9 @@ fn main() -> VkResult<()> {
         }),
     )?;
 
-    let image = device.import_2d_rgba8_image(
+    let image = device.import_2d_image(
         "image".into(),
-        image_buffer.width(),
-        image_buffer.height(),
-        image_buffer.as_bytes(),
+        &image_buffer.into(),
         ImageUsageFlags::SAMPLED,
         ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     )?;
@@ -609,14 +607,24 @@ fn main() -> VkResult<()> {
                 command_buffer.copy_image_to_buffer(
                     device.presentation_image(),
                     device.presentation_buffer_readback(),
-                    Extent2D {
-                        width: device.width,
-                        height: device.height,
-                    },
+                    &[BufferImageCopy::builder()
+                        .image_subresource(
+                            ImageSubresourceLayers::builder()
+                                .aspect_mask(ImageAspectFlags::COLOR)
+                                .mip_level(0)
+                                .layer_count(1)
+                                .build(),
+                        )
+                        .image_extent(Extent3D {
+                            width: device.width,
+                            height: device.height,
+                            depth: 1,
+                        })
+                        .build()],
                     AccessFlags::COLOR_ATTACHMENT_WRITE,
                     ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     1,
-                    ImageAspectFlags::COLOR,
+                    1,
                     ImageAspectFlags::COLOR,
                     PipelineStageFlags::ALL_COMMANDS,
                 )?;

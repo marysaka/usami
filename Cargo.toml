@@ -6,4 +6,5 @@ edition = "2021"
 
 [dependencies]
 ash = { version = "0.37.3", features = ["linked", "debug"] }
+colorgrad = "0.6.2"
 image = "0.24.6"

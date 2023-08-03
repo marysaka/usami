@@ -3,9 +3,9 @@ use ash::{
     vk::{
         self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, CommandBuffer,
         CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel,
-        CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, Extent2D,
-        Handle, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
-        ImageSubresourceRange, ObjectType, PipelineStageFlags,
+        CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, Handle,
+        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, ObjectType,
+        PipelineStageFlags,
     },
     Device,
 };
@@ -117,9 +117,9 @@ impl UsamiCommandBuffer {
         let image_subresource_range = image_subresource_range_opt.unwrap_or(
             ImageSubresourceRange::builder()
                 .base_array_layer(0)
-                .layer_count(1)
+                .layer_count(image.create_info.array_layers)
                 .base_mip_level(0)
-                .level_count(1)
+                .level_count(image.create_info.mip_levels)
                 .aspect_mask(ImageAspectFlags::COLOR)
                 .build(),
         );
@@ -258,19 +258,19 @@ impl UsamiCommandBuffer {
         &self,
         image: &UsamiImage,
         buffer: &UsamiBuffer,
-        size: Extent2D,
+        regions: &[BufferImageCopy],
         src_access_mask: AccessFlags,
         old_layout: ImageLayout,
         layer_count: u32,
+        level_count: u32,
         barrier_aspect: ImageAspectFlags,
-        copy_aspect: ImageAspectFlags,
         src_stage_mask: PipelineStageFlags,
     ) -> VkResult<()> {
         let image_subresource_range = ImageSubresourceRange::builder()
             .base_array_layer(0)
             .layer_count(layer_count)
             .base_mip_level(0)
-            .level_count(1)
+            .level_count(level_count)
             .aspect_mask(barrier_aspect)
             .build();
 
@@ -291,18 +291,9 @@ impl UsamiCommandBuffer {
                 image.handle,
                 ImageLayout::TRANSFER_SRC_OPTIMAL,
                 buffer.handle,
-                &[BufferImageCopy::builder()
-                    .image_subresource(
-                        ImageSubresourceLayers::builder()
-                            .aspect_mask(copy_aspect)
-                            .layer_count(layer_count)
-                            .build(),
-                    )
-                    .image_extent(size.into())
-                    .build()],
+                regions,
             );
         }
-
         self.add_buffer_barrier(
             buffer,
             PipelineStageFlags::TRANSFER,
@@ -344,6 +335,7 @@ impl UsamiDevice {
         buffer: &UsamiBuffer,
         image: &UsamiImage,
         new_layout: ImageLayout,
+        copy_regions: &[BufferImageCopy],
     ) -> VkResult<()> {
         utils::record_and_execute_command_buffer(
             self,
@@ -352,17 +344,7 @@ impl UsamiDevice {
                 command_buffer.copy_buffer_to_image(
                     buffer,
                     vk::WHOLE_SIZE,
-                    &[BufferImageCopy::builder()
-                        .image_subresource(
-                            ImageSubresourceLayers::builder()
-                                .aspect_mask(ImageAspectFlags::COLOR)
-                                .mip_level(0)
-                                .base_array_layer(0)
-                                .layer_count(image.create_info.array_layers)
-                                .build(),
-                        )
-                        .image_extent(image.create_info.extent)
-                        .build()],
+                    copy_regions,
                     ImageAspectFlags::COLOR,
                     image.create_info.mip_levels,
                     image.create_info.array_layers,

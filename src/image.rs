@@ -1,15 +1,17 @@
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferUsageFlags, ComponentMapping, Extent3D, Format, Handle, Image,
-        ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling, ImageType,
-        ImageUsageFlags, ImageView, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType,
-        MemoryPropertyFlags, ObjectType, SampleCountFlags, SharingMode,
+        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent2D, Format,
+        Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
+        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
+        SampleCountFlags, SharingMode,
     },
     Device,
 };
+use image::{RgbImage, RgbaImage};
 
-use crate::{UsamiDevice, UsamiDeviceMemory};
+use crate::{utils, UsamiDevice, UsamiDeviceMemory};
 
 pub struct UsamiImage {
     device: Device,
@@ -120,24 +122,18 @@ impl UsamiDevice {
         Ok(image_view)
     }
 
-    pub fn import_2d_rgba8_image(
+    pub fn import_2d_image(
         &self,
         name: String,
-        width: u32,
-        height: u32,
-        data: &[u8],
+        raw_image: &RawImageData,
         usage: ImageUsageFlags,
         layout: ImageLayout,
     ) -> VkResult<UsamiImage> {
         let image_create_info = ImageCreateInfo::builder()
             .image_type(ImageType::TYPE_2D)
-            .format(Format::R8G8B8A8_UNORM)
-            .extent(Extent3D {
-                width,
-                height,
-                depth: 1,
-            })
-            .mip_levels(1)
+            .format(raw_image.format)
+            .extent(raw_image.level_infos[0].extent.into())
+            .mip_levels(raw_image.level_count() as u32)
             .array_layers(1)
             .initial_layout(ImageLayout::UNDEFINED)
             .samples(SampleCountFlags::TYPE_1)
@@ -156,11 +152,118 @@ impl UsamiDevice {
             BufferCreateFlags::empty(),
             SharingMode::EXCLUSIVE,
             BufferUsageFlags::TRANSFER_SRC,
-            data,
+            &raw_image.data,
         )?;
 
-        self.copy_buffer_to_image(&temporary_buffer, &image, layout)?;
+        self.copy_buffer_to_image(
+            &temporary_buffer,
+            &image,
+            layout,
+            &raw_image.copy_regions(ImageAspectFlags::COLOR),
+        )?;
 
         Ok(image)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RawImageLevelInfo {
+    pub extent: Extent2D,
+    pub start_position: usize,
+}
+
+impl RawImageLevelInfo {
+    pub fn buffer_copy(&self, aspect_mask: ImageAspectFlags, mip_level: u32) -> BufferImageCopy {
+        BufferImageCopy::builder()
+            .buffer_offset(self.start_position as u64)
+            .image_subresource(
+                ImageSubresourceLayers::builder()
+                    .aspect_mask(aspect_mask)
+                    .mip_level(mip_level)
+                    .base_array_layer(0)
+                    .layer_count(1)
+                    .build(),
+            )
+            .image_extent(self.extent.into())
+            .build()
+    }
+
+    pub fn size(&self, format: Format) -> u32 {
+        let pixel_count = self.extent.height * self.extent.width;
+
+        pixel_count * utils::get_format_size(format)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RawImageData {
+    pub format: Format,
+    pub data: Vec<u8>,
+    pub level_infos: Vec<RawImageLevelInfo>,
+}
+
+impl RawImageData {
+    pub const fn new(format: Format, data: Vec<u8>, level_infos: Vec<RawImageLevelInfo>) -> Self {
+        Self {
+            format,
+            data,
+            level_infos,
+        }
+    }
+
+    pub fn raw_size(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn level_count(&self) -> usize {
+        self.level_infos.len()
+    }
+
+    pub fn size(&self, level: u32) -> Option<u32> {
+        self.level_infos
+            .get(level as usize)
+            .map(|level_info| level_info.size(self.format))
+    }
+
+    pub fn copy_regions(&self, aspect_mask: ImageAspectFlags) -> Vec<BufferImageCopy> {
+        let mut res = Vec::new();
+
+        for (mip_level, level_info) in self.level_infos.iter().enumerate() {
+            res.push(level_info.buffer_copy(aspect_mask, mip_level as u32));
+        }
+
+        res
+    }
+}
+
+impl From<RgbaImage> for RawImageData {
+    fn from(value: RgbaImage) -> Self {
+        Self {
+            format: Format::R8G8B8A8_UNORM,
+            data: value.to_vec(),
+            level_infos: vec![RawImageLevelInfo {
+                extent: Extent2D {
+                    width: value.width(),
+                    height: value.height(),
+                },
+                start_position: 0,
+            }],
+        }
+    }
+}
+
+impl From<RgbImage> for RawImageData {
+    fn from(value: RgbImage) -> Self {
+        Self {
+            format: Format::R8G8B8_UNORM,
+            data: value.to_vec(),
+            level_infos: vec![RawImageLevelInfo {
+                extent: Extent2D {
+                    width: value.width(),
+                    height: value.height(),
+                },
+                start_position: 0,
+            }],
+        }
     }
 }
