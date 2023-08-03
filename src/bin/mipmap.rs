@@ -9,37 +9,6 @@ use ash::{
 };
 use usami::{utils, UsamiDevice, UsamiInstance};
 
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
-struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
-struct Vec3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
-struct Vec4 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
-}
-
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
-struct Vertex {
-    pub pos: Vec4,
-    pub uv: Vec2,
-}
-
 #[derive(Clone, Debug, Copy, Default)]
 #[repr(packed(1))]
 #[allow(dead_code)]
@@ -147,14 +116,17 @@ fn main() -> VkResult<()> {
 
     let gradient_readback_raw_buffer = gradient_readback_buffer.device_memory.read_to_vec()?;
 
-    image::save_buffer_with_format(
-        "output.bmp",
-        &gradient_readback_raw_buffer,
-        width,
-        height,
-        image::ColorType::Rgba8,
-        image::ImageFormat::Bmp,
-    )
-    .unwrap();
+    for (index, level) in gradient_raw_image.level_infos.iter().enumerate() {
+        image::save_buffer_with_format(
+            format!("output_{index}.png"),
+            &gradient_readback_raw_buffer[level.start_position..level.start_position + level.size(gradient_raw_image.format) as usize],
+            level.extent.width,
+            level.extent.height,
+            image::ColorType::Rgba8,
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    }
+    
     Ok(())
 }
