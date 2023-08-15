@@ -97,9 +97,10 @@ pub fn create_gradient_image_with_mip_levels(
         let level_height = std::cmp::max(height >> level, 1);
 
         level_infos.push(RawImageLevelInfo {
-            extent: Extent2D {
+            extent: Extent3D {
                 width: level_width,
                 height: level_height,
+                depth: 1,
             },
             start_position: data.len(),
         });

@@ -1,11 +1,11 @@
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent2D, Format,
-        Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
-        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
-        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
-        SampleCountFlags, SharingMode,
+        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent2D, Extent3D,
+        Format, Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout,
+        ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags,
+        ImageView, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
+        ObjectType, SampleCountFlags, SharingMode,
     },
     Device,
 };
@@ -122,7 +122,7 @@ impl UsamiDevice {
         Ok(image_view)
     }
 
-    pub fn import_2d_image(
+    pub fn import_image(
         &self,
         name: String,
         raw_image: &RawImageData,
@@ -168,7 +168,7 @@ impl UsamiDevice {
 
 #[derive(Clone, Copy, Debug)]
 pub struct RawImageLevelInfo {
-    pub extent: Extent2D,
+    pub extent: Extent3D,
     pub start_position: usize,
 }
 
@@ -184,7 +184,7 @@ impl RawImageLevelInfo {
                     .layer_count(1)
                     .build(),
             )
-            .image_extent(self.extent.into())
+            .image_extent(self.extent)
             .build()
     }
 
@@ -242,9 +242,10 @@ impl From<RgbaImage> for RawImageData {
             format: Format::R8G8B8A8_UNORM,
             data: value.to_vec(),
             level_infos: vec![RawImageLevelInfo {
-                extent: Extent2D {
+                extent: Extent3D {
                     width: value.width(),
                     height: value.height(),
+                    depth: 1,
                 },
                 start_position: 0,
             }],
@@ -258,9 +259,10 @@ impl From<RgbImage> for RawImageData {
             format: Format::R8G8B8_UNORM,
             data: value.to_vec(),
             level_infos: vec![RawImageLevelInfo {
-                extent: Extent2D {
+                extent: Extent3D {
                     width: value.width(),
                     height: value.height(),
+                    depth: 1,
                 },
                 start_position: 0,
             }],

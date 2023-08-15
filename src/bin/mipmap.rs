@@ -25,7 +25,7 @@ fn main() -> VkResult<()> {
     let extensions = ["VK_EXT_debug_utils".into()];
 
     let width = 128;
-    let height = 64;
+    let height = 1;
 
     let instance = UsamiInstance::new("mipmap", "usami", vk::API_VERSION_1_1, &extensions, true)?;
     let device: UsamiDevice = UsamiDevice::new_by_filter(
@@ -53,7 +53,7 @@ fn main() -> VkResult<()> {
 
     let gradient_raw_image =
         utils::create_gradient_image_with_mip_levels(width, height, mipmap_count);
-    let gradient_image = device.import_2d_image(
+    let gradient_image = device.import_image(
         "gradient_image".into(),
         &gradient_raw_image,
         ImageUsageFlags::SAMPLED | ImageUsageFlags::TRANSFER_SRC,
@@ -119,7 +119,8 @@ fn main() -> VkResult<()> {
     for (index, level) in gradient_raw_image.level_infos.iter().enumerate() {
         image::save_buffer_with_format(
             format!("output_{index}.png"),
-            &gradient_readback_raw_buffer[level.start_position..level.start_position + level.size(gradient_raw_image.format) as usize],
+            &gradient_readback_raw_buffer[level.start_position
+                ..level.start_position + level.size(gradient_raw_image.format) as usize],
             level.extent.width,
             level.extent.height,
             image::ColorType::Rgba8,
@@ -127,6 +128,6 @@ fn main() -> VkResult<()> {
         )
         .unwrap();
     }
-    
+
     Ok(())
 }

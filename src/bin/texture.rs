@@ -64,7 +64,7 @@ fn main() -> VkResult<()> {
         image::load_from_memory(include_bytes!("../../resources/texture/white.png"))
             .unwrap()
             .to_rgba8();
-    let white_image = device.import_2d_image(
+    let white_image = device.import_image(
         "white_image".into(),
         &white_image_buffer.into(),
         ImageUsageFlags::SAMPLED,
