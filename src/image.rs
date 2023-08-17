@@ -64,6 +64,27 @@ impl UsamiImage {
                 .build(),
         )
     }
+
+    pub fn buffer_copy(
+        &self,
+        aspect_mask: ImageAspectFlags,
+        mip_level: u32,
+        base_array_layer: u32,
+        layer_count: u32,
+    ) -> BufferImageCopy {
+        BufferImageCopy::builder()
+            .buffer_offset(0)
+            .image_subresource(
+                ImageSubresourceLayers::builder()
+                    .aspect_mask(aspect_mask)
+                    .mip_level(mip_level)
+                    .base_array_layer(base_array_layer)
+                    .layer_count(layer_count)
+                    .build(),
+            )
+            .image_extent(self.create_info.extent)
+            .build()
+    }
 }
 
 impl Drop for UsamiImage {

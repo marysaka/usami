@@ -1,8 +1,9 @@
 use ash::{
     prelude::*,
     vk::{
-        DescriptorSetLayout, GraphicsPipelineCreateInfo, Handle, ObjectType, Pipeline,
-        PipelineCache, PipelineLayout, PipelineLayoutCreateFlags, PipelineLayoutCreateInfo,
+        ComputePipelineCreateInfo, DescriptorSetLayout, GraphicsPipelineCreateInfo, Handle,
+        ObjectType, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
+        PipelineLayoutCreateInfo,
     },
     Device,
 };
@@ -36,13 +37,13 @@ impl Drop for UsamiPipelineLayout {
     }
 }
 
-pub struct UsamiGraphicsPipeline {
+pub struct UsamiPipeline {
     device: Device,
     pub handle: Pipeline,
 }
 
-impl UsamiGraphicsPipeline {
-    pub fn new(
+impl UsamiPipeline {
+    pub fn new_graphics(
         device: &Device,
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
@@ -61,9 +62,29 @@ impl UsamiGraphicsPipeline {
             })
             .collect())
     }
+
+    pub fn new_compute(
+        device: &Device,
+        pipeline_cache: PipelineCache,
+        create_infos: &[ComputePipelineCreateInfo],
+    ) -> VkResult<Vec<Self>> {
+        let result = unsafe {
+            device
+                .create_compute_pipelines(pipeline_cache, create_infos, None)
+                .map_err(|(_, x)| x)?
+        };
+
+        Ok(result
+            .iter()
+            .map(|handle| Self {
+                device: device.clone(),
+                handle: *handle,
+            })
+            .collect())
+    }
 }
 
-impl Drop for UsamiGraphicsPipeline {
+impl Drop for UsamiPipeline {
     fn drop(&mut self) {
         unsafe { self.device.destroy_pipeline(self.handle, None) }
     }
@@ -86,13 +107,32 @@ impl UsamiDevice {
         Ok(pipeline_layout)
     }
 
+    pub fn create_compute_pipelines(
+        &self,
+        name: String,
+        pipeline_cache: PipelineCache,
+        create_infos: &[ComputePipelineCreateInfo],
+    ) -> VkResult<Vec<UsamiPipeline>> {
+        let pipelines = UsamiPipeline::new_compute(&self.handle, pipeline_cache, create_infos)?;
+
+        for (idx, pipeline) in pipelines.iter().enumerate() {
+            self.set_debug_name(
+                format!("{name}_{idx}"),
+                pipeline.handle.as_raw(),
+                ObjectType::PIPELINE,
+            )?;
+        }
+
+        Ok(pipelines)
+    }
+
     pub fn create_graphics_pipelines(
         &self,
         name: String,
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
-    ) -> VkResult<Vec<UsamiGraphicsPipeline>> {
-        let pipelines = UsamiGraphicsPipeline::new(&self.handle, pipeline_cache, create_infos)?;
+    ) -> VkResult<Vec<UsamiPipeline>> {
+        let pipelines = UsamiPipeline::new_graphics(&self.handle, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
             self.set_debug_name(

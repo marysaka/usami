@@ -24,7 +24,7 @@ pub use crate::framebuffer::UsamiFramebuffer;
 pub use crate::image::{UsamiImage, UsamiImageView};
 pub use crate::instance::UsamiInstance;
 pub use crate::memory::UsamiDeviceMemory;
-pub use crate::pipeline::{UsamiGraphicsPipeline, UsamiPipelineLayout};
+pub use crate::pipeline::{UsamiPipeline, UsamiPipelineLayout};
 pub use crate::queue::UsamiQueue;
 pub use crate::renderpass::UsamiRenderPass;
 pub use crate::shader::UsamiShader;
