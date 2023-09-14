@@ -4,11 +4,11 @@ use ash::{
     prelude::*,
     vk::{
         self, DeviceMemory, MappedMemoryRange, MemoryAllocateInfo, MemoryMapFlags,
-        MemoryPropertyFlags, MemoryRequirements,
+        MemoryPropertyFlags, MemoryRequirements, WHOLE_SIZE,
     },
 };
 
-use crate::UsamiDevice;
+use crate::{NextMultipleOf, UsamiDevice};
 
 pub struct UsamiDeviceMemory {
     device: Arc<UsamiDevice>,
@@ -58,13 +58,40 @@ impl UsamiDeviceMemory {
     }
 
     pub fn flush(&self, offset: u64, size: u64) -> VkResult<()> {
+        let alignment = self
+            .device
+            .physical_device
+            .properties
+            .limits
+            .non_coherent_atom_size;
+
+        let mut aligned_offset = offset.next_multiple_of(alignment);
+        let mut aligned_size = if size == WHOLE_SIZE {
+            size
+        } else {
+            let aligned_size = size.next_multiple_of(alignment);
+
+            if aligned_offset != offset {
+                aligned_offset -= alignment;
+                aligned_size + alignment
+            } else {
+                aligned_size
+            }
+        };
+
+        assert!(aligned_offset < self.allocate_info.allocation_size);
+
+        if aligned_size >= (self.allocate_info.allocation_size - aligned_offset) {
+            aligned_size = vk::WHOLE_SIZE;
+        }
+
         unsafe {
             self.device
                 .handle
                 .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
                     .memory(self.handle)
-                    .offset(offset)
-                    .size(size)
+                    .offset(aligned_offset)
+                    .size(aligned_size)
                     .build()])
         }
     }
