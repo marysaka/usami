@@ -36,7 +36,13 @@ fn main() -> VkResult<()> {
 
     let (group_count_x, group_count_y, group_count_z) = (1, 1, 1);
 
-    let instance = UsamiInstance::new("compute_coherent", "usami", vk::API_VERSION_1_1, &extensions, false)?;
+    let instance = UsamiInstance::new(
+        "compute_coherent",
+        "usami",
+        vk::API_VERSION_1_1,
+        &extensions,
+        false,
+    )?;
     let device: UsamiDevice = UsamiDevice::new_by_filter(
         instance,
         &[],
@@ -67,7 +73,7 @@ fn main() -> VkResult<()> {
             depth: 1,
         })
         .mip_levels(1)
-        .array_layers(2)
+        .array_layers(1)
         .samples(SampleCountFlags::TYPE_1)
         .tiling(ImageTiling::OPTIMAL)
         .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::TRANSFER_SRC)
@@ -81,7 +87,7 @@ fn main() -> VkResult<()> {
     let output_image_view = output_image.create_simple_image_view(
         &device,
         "output_image_view".into(),
-        ImageViewType::TYPE_1D_ARRAY,
+        ImageViewType::TYPE_1D,
         ImageSubresourceRange::builder()
             .aspect_mask(ImageAspectFlags::COLOR)
             .base_mip_level(0)
@@ -268,7 +274,17 @@ fn main() -> VkResult<()> {
     fence.reset()?;
 
     let output_readback_raw_buffer = output_readback_buffer.device_memory.read_to_vec()?;
-    println!("{:?}", output_readback_raw_buffer);
+
+    for i in 0..4 {
+        let val = f32::from_le_bytes(
+            output_readback_raw_buffer[(i) * 4..(i + 1) * 4]
+                .try_into()
+                .unwrap(),
+        );
+        println!("val{i}: {val}");
+    }
+    //assert_eq!(val0, 42.0);
+    //assert_eq!(val1, 69.0);
 
     Ok(())
 }
