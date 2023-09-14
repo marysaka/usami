@@ -10,7 +10,7 @@ use image::{EncodableLayout, ImageBuffer, RgbaImage};
 
 use crate::{
     image::{RawImageData, RawImageLevelInfo},
-    UsamiBuffer, UsamiCommandBuffer, UsamiDevice, UsamiImage,
+    NextMultipleOf, UsamiBuffer, UsamiCommandBuffer, UsamiDevice, UsamiImage,
 };
 
 #[macro_export]
@@ -27,7 +27,7 @@ macro_rules! offset_of {
 pub fn as_u32_vec(data: &[u8]) -> Vec<u32> {
     let mut res = Vec::new();
 
-    let size_aligned = (data.len() + 3) / 4;
+    let size_aligned = data.len().next_multiple_of(4) / 4;
 
     res.resize(size_aligned, 0);
 

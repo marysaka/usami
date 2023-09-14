@@ -1,4 +1,4 @@
-#![allow(clippy::too_many_arguments)]
+#![allow(clippy::too_many_arguments, unstable_name_collisions)]
 
 pub mod buffer;
 pub mod command;
@@ -9,6 +9,7 @@ pub mod framebuffer;
 pub mod image;
 pub mod instance;
 pub mod memory;
+pub mod nak_utils;
 pub mod pipeline;
 pub mod queue;
 pub mod renderpass;
@@ -24,6 +25,7 @@ pub use crate::framebuffer::UsamiFramebuffer;
 pub use crate::image::{UsamiImage, UsamiImageView};
 pub use crate::instance::UsamiInstance;
 pub use crate::memory::UsamiDeviceMemory;
+pub use crate::nak_utils::*;
 pub use crate::pipeline::{UsamiPipeline, UsamiPipelineLayout};
 pub use crate::queue::UsamiQueue;
 pub use crate::renderpass::UsamiRenderPass;
