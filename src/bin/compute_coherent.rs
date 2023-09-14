@@ -36,7 +36,7 @@ fn main() -> VkResult<()> {
 
     let (group_count_x, group_count_y, group_count_z) = (1, 1, 1);
 
-    let instance = UsamiInstance::new("mipmap", "usami", vk::API_VERSION_1_1, &extensions, true)?;
+    let instance = UsamiInstance::new("compute_coherent", "usami", vk::API_VERSION_1_1, &extensions, false)?;
     let device: UsamiDevice = UsamiDevice::new_by_filter(
         instance,
         &[],
