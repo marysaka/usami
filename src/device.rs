@@ -1,21 +1,22 @@
 use std::{
     ffi::{c_char, CString},
-    mem::{ManuallyDrop, MaybeUninit},
+    mem::MaybeUninit,
+    sync::Arc,
 };
 
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferUsageFlags, CommandPoolCreateInfo, ComponentMapping,
-        ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-        Extent3D, Format, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling,
-        ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags,
-        ObjectType, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
+        BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
+        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format,
+        ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType,
+        ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags, ObjectType,
+        PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
         PhysicalDeviceProperties, QueueFamilyProperties, SampleCountFlags, SharingMode,
     },
 };
 
-use crate::{UsamiBuffer, UsamiCommandPool, UsamiImage, UsamiImageView, UsamiInstance, UsamiQueue};
+use crate::{UsamiBuffer, UsamiImage, UsamiImageView, UsamiInstance};
 
 pub struct UsamiPhysicalDevice {
     pub handle: PhysicalDevice,
@@ -32,7 +33,6 @@ pub struct UsamiDevice {
     pub instance: UsamiInstance,
     pub physical_device: UsamiPhysicalDevice,
     pub handle: ash::Device,
-    pub command_pool: ManuallyDrop<UsamiCommandPool>,
     pub vk_queue_index: u32,
     pub presentation_image: MaybeUninit<UsamiImage>,
     pub presentation_image_view: MaybeUninit<UsamiImageView>,
@@ -46,7 +46,7 @@ impl UsamiDevice {
         width: u32,
         height: u32,
         should_grab: Box<dyn FnMut(UsamiPhysicalDevice) -> Option<(UsamiPhysicalDevice, u32)>>,
-    ) -> VkResult<Self> {
+    ) -> VkResult<Arc<Self>> {
         let (physical_device, vk_queue_index) =
             unsafe { instance.vk_instance.enumerate_physical_devices()? }
                 .iter()
@@ -101,25 +101,17 @@ impl UsamiDevice {
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
-        let command_pool = UsamiCommandPool::new(
-            &handle,
-            CommandPoolCreateInfo::builder()
-                .queue_family_index(vk_queue_index)
-                .build(),
-        )?;
-
-        let mut result = Self {
+        let result = Arc::new(Self {
             width,
             height,
             instance,
             physical_device,
             handle,
             vk_queue_index,
-            command_pool: ManuallyDrop::new(command_pool),
             presentation_image: MaybeUninit::uninit(),
             presentation_image_view: MaybeUninit::uninit(),
             presentation_buffer_readback: MaybeUninit::uninit(),
-        };
+        });
 
         let presentation_image_info = ImageCreateInfo::builder()
             .image_type(ImageType::TYPE_2D)
@@ -141,13 +133,14 @@ impl UsamiDevice {
             )
             .build();
 
-        result.presentation_image.write(result.create_image(
+        let presentation_image = Self::create_image(
+            &result,
             "presentation_image".into(),
             presentation_image_info,
             MemoryPropertyFlags::empty(),
-        )?);
-        let presentation_image_view = result.presentation_image().create_simple_image_view(
-            &result,
+        )?;
+
+        let presentation_image_view = presentation_image.create_simple_image_view(
             "presentation_image_view".into(),
             ImageViewType::TYPE_2D,
             ImageSubresourceRange::builder()
@@ -165,11 +158,9 @@ impl UsamiDevice {
                 .build(),
             ImageViewCreateFlags::empty(),
         )?;
-        result
-            .presentation_image_view
-            .write(presentation_image_view);
 
-        let presentation_buffer_readback = result.create_buffer_with_size(
+        let presentation_buffer_readback = Self::create_buffer_with_size(
+            &result,
             "presentation_buffer_readback".into(),
             BufferCreateFlags::empty(),
             SharingMode::EXCLUSIVE,
@@ -178,7 +169,18 @@ impl UsamiDevice {
             MemoryPropertyFlags::HOST_VISIBLE,
         )?;
 
-        result
+        // TODO: move all the presentation to another struct.
+        let device_mutable = unsafe {
+            // SAFETY: nothing else is mutating state at this point of the execution.
+            &mut *(Arc::as_ptr(&result) as *mut UsamiDevice)
+        };
+
+        device_mutable.presentation_image.write(presentation_image);
+        device_mutable
+            .presentation_image_view
+            .write(presentation_image_view);
+
+        device_mutable
             .presentation_buffer_readback
             .write(presentation_buffer_readback);
 
@@ -195,10 +197,6 @@ impl UsamiDevice {
 
     pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
         unsafe { self.presentation_buffer_readback.assume_init_ref() }
-    }
-
-    pub fn get_queue(&self) -> VkResult<UsamiQueue> {
-        self.get_device_queue("queue".into(), self.vk_queue_index, 0)
     }
 
     pub fn set_debug_name(
@@ -233,7 +231,6 @@ impl UsamiDevice {
 impl Drop for UsamiDevice {
     fn drop(&mut self) {
         unsafe {
-            ManuallyDrop::drop(&mut self.command_pool);
             self.presentation_image_view.assume_init_drop();
             self.presentation_buffer_readback.assume_init_drop();
             self.presentation_image.assume_init_drop();

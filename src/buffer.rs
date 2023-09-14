@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{
@@ -10,7 +12,7 @@ use ash::{
 use crate::{UsamiDevice, UsamiDeviceMemory};
 
 pub struct UsamiBuffer {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub create_info: BufferCreateInfo,
     pub handle: Buffer,
     pub device_memory: UsamiDeviceMemory,
@@ -18,7 +20,7 @@ pub struct UsamiBuffer {
 
 impl UsamiBuffer {
     pub fn new(
-        device: &UsamiDevice,
+        device: &Arc<UsamiDevice>,
         create_info: BufferCreateInfo,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
@@ -32,7 +34,7 @@ impl UsamiBuffer {
         }
 
         Ok(Self {
-            device: device.handle.clone(),
+            device: device.clone(),
             create_info,
             handle,
             device_memory,
@@ -58,13 +60,13 @@ impl UsamiBuffer {
 
 impl Drop for UsamiBuffer {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_buffer(self.handle, None) }
+        unsafe { self.device.handle.destroy_buffer(self.handle, None) }
     }
 }
 
 impl UsamiDevice {
     pub fn create_buffer<T: Copy>(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         flags: BufferCreateFlags,
         sharing_mode: SharingMode,
@@ -72,7 +74,8 @@ impl UsamiDevice {
         data: &[T],
     ) -> VkResult<UsamiBuffer> {
         let size = std::mem::size_of_val(data) as u64;
-        let buffer = self.create_buffer_with_size(
+        let buffer = Self::create_buffer_with_size(
+            device,
             name,
             flags,
             sharing_mode,
@@ -87,7 +90,7 @@ impl UsamiDevice {
     }
 
     pub fn create_buffer_with_size(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         flags: BufferCreateFlags,
         sharing_mode: SharingMode,
@@ -100,11 +103,11 @@ impl UsamiDevice {
             .sharing_mode(sharing_mode)
             .usage(usage)
             .size(size)
-            .queue_family_indices(&[self.vk_queue_index])
+            .queue_family_indices(&[device.vk_queue_index])
             .build();
-        let buffer = UsamiBuffer::new(self, create_info, memory_flags)?;
+        let buffer = UsamiBuffer::new(device, create_info, memory_flags)?;
 
-        self.set_debug_name(name, buffer.handle.as_raw(), ObjectType::BUFFER)?;
+        device.set_debug_name(name, buffer.handle.as_raw(), ObjectType::BUFFER)?;
 
         Ok(buffer)
     }

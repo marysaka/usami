@@ -14,7 +14,7 @@ use ash::{
         WriteDescriptorSet,
     },
 };
-use usami::{utils, UsamiDevice, UsamiInstance};
+use usami::{UsamiDevice, UsamiInstance};
 
 #[derive(Clone, Debug, Copy, Default)]
 #[repr(packed(1))]
@@ -43,7 +43,7 @@ fn main() -> VkResult<()> {
         &extensions,
         false,
     )?;
-    let device: UsamiDevice = UsamiDevice::new_by_filter(
+    let device = UsamiDevice::new_by_filter(
         instance,
         &[],
         width,
@@ -79,13 +79,13 @@ fn main() -> VkResult<()> {
         .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::TRANSFER_SRC)
         .build();
 
-    let output_image = device.create_image(
+    let output_image = UsamiDevice::create_image(
+        &device,
         "output_image".into(),
         output_image_info,
         MemoryPropertyFlags::empty(),
     )?;
     let output_image_view = output_image.create_simple_image_view(
-        &device,
         "output_image_view".into(),
         ImageViewType::TYPE_1D,
         ImageSubresourceRange::builder()
@@ -104,7 +104,8 @@ fn main() -> VkResult<()> {
         ImageViewCreateFlags::empty(),
     )?;
 
-    let output_readback_buffer = device.create_buffer_with_size(
+    let output_readback_buffer = UsamiDevice::create_buffer_with_size(
+        &device,
         "output_readback_buffer".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
@@ -122,8 +123,11 @@ fn main() -> VkResult<()> {
         .max_sets(1)
         .build();
 
-    let descriptor_pool =
-        device.create_descriptor_pool("descriptor_pool".into(), descriptor_pool_create_info)?;
+    let descriptor_pool = UsamiDevice::create_descriptor_pool(
+        &device,
+        "descriptor_pool".into(),
+        descriptor_pool_create_info,
+    )?;
 
     let desc_layout_bindings = [vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
@@ -131,18 +135,16 @@ fn main() -> VkResult<()> {
         .descriptor_count(1)
         .stage_flags(ShaderStageFlags::COMPUTE)
         .build()];
-    let descriptor_set_layout = device.create_descriptor_set_layout(
+    let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
+        &device,
         "descriptor_set_layout".into(),
         DescriptorSetLayoutCreateInfo::builder()
             .bindings(&desc_layout_bindings)
             .build(),
     )?;
 
-    let descriptor_sets = descriptor_pool.allocate_descriptor_sets(
-        &device,
-        "descriptor_set".into(),
-        &[descriptor_set_layout.handle],
-    )?;
+    let descriptor_sets = descriptor_pool
+        .allocate_descriptor_sets("descriptor_set".into(), &[descriptor_set_layout.handle])?;
 
     unsafe {
         device.handle.update_descriptor_sets(
@@ -159,7 +161,8 @@ fn main() -> VkResult<()> {
         );
     }
 
-    let pipeline_layout = device.create_pipeline_layout(
+    let pipeline_layout = UsamiDevice::create_pipeline_layout(
+        &device,
         "base_pipeline_layout".into(),
         &[descriptor_set_layout.handle],
     )?;
@@ -169,7 +172,8 @@ fn main() -> VkResult<()> {
     let compute_shader_code = usami::utils::as_u32_vec(include_bytes!(
         "../../resources/compute_coherent/main.comp.spv"
     ));
-    let compute_shader = device.create_shader("vertex_shader".into(), &compute_shader_code)?;
+    let compute_shader =
+        UsamiDevice::create_shader(&device, "vertex_shader".into(), &compute_shader_code)?;
 
     let shader_stage_create_info = PipelineShaderStageCreateInfo::builder()
         .module(compute_shader.handle)
@@ -182,21 +186,23 @@ fn main() -> VkResult<()> {
         .stage(shader_stage_create_info)
         .build();
 
-    let pipelines = device.create_compute_pipelines(
+    let pipelines = UsamiDevice::create_compute_pipelines(
+        &device,
         "pipeline".into(),
         PipelineCache::null(),
         &[compute_pipeline_create_info],
     )?;
 
-    let command_pool = device.create_command_pool(
+    let command_pool = UsamiDevice::create_command_pool(
+        &device,
         "command_pool".into(),
         CommandPoolCreateInfo::builder()
+            .queue_family_index(device.vk_queue_index)
             .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
             .build(),
     )?;
 
     let command_buffers = command_pool.allocate_command_buffers(
-        &device,
         "command_buffer".into(),
         CommandBufferLevel::PRIMARY,
         1,
@@ -205,7 +211,6 @@ fn main() -> VkResult<()> {
     let pipeline = &pipelines[0];
 
     command_buffers[0].record(
-        &device,
         CommandBufferUsageFlags::ONE_TIME_SUBMIT,
         |_, command_buffer| {
             let vk_device = &device.handle;
@@ -262,9 +267,10 @@ fn main() -> VkResult<()> {
         },
     )?;
 
-    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
+    let fence = UsamiDevice::create_fence(&device, "fence".into(), FenceCreateFlags::empty())?;
+    let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
-    device.get_queue()?.submit(
+    queue.submit(
         &[SubmitInfo::builder()
             .command_buffers(&[command_buffers[0].handle])
             .build()],

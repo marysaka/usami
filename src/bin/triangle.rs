@@ -5,18 +5,18 @@ use ash::{
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
-        ColorComponentFlags, CommandBufferLevel, CompareOp, DynamicState, Extent2D,
-        FenceCreateFlags, Format, FramebufferCreateInfo, FrontFace, GraphicsPipelineCreateInfo,
-        ImageLayout, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-        PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-        PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags, Rect2D,
-        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, SharingMode,
-        StencilOp, StencilOpState, SubmitInfo, SubpassContents, SubpassDependency,
-        SubpassDescription, VertexInputAttributeDescription, VertexInputBindingDescription,
-        VertexInputRate, Viewport,
+        ColorComponentFlags, CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo,
+        CompareOp, DynamicState, Extent2D, FenceCreateFlags, Format, FramebufferCreateInfo,
+        FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp, PipelineBindPoint,
+        PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+        PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
+        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
+        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
+        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
+        PrimitiveTopology, QueueFlags, Rect2D, RenderPassBeginInfo, RenderPassCreateInfo,
+        SampleCountFlags, ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo,
+        SubpassContents, SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
+        VertexInputBindingDescription, VertexInputRate, Viewport,
     },
 };
 use usami::{offset_of, UsamiDevice, UsamiInstance};
@@ -35,7 +35,7 @@ fn main() -> VkResult<()> {
     let height = 1080;
 
     let instance = UsamiInstance::new("triangle", "usami", vk::API_VERSION_1_1, &extensions, true)?;
-    let device: UsamiDevice = UsamiDevice::new_by_filter(
+    let device = UsamiDevice::new_by_filter(
         instance,
         &[],
         width,
@@ -57,7 +57,8 @@ fn main() -> VkResult<()> {
     )?;
 
     let index_buffer_data = [0u32, 1, 2];
-    let index_buffer = device.create_buffer(
+    let index_buffer = UsamiDevice::create_buffer(
+        &device,
         "index_buffer".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
@@ -80,7 +81,8 @@ fn main() -> VkResult<()> {
         },
     ];
 
-    let vbo_buffer = device.create_buffer(
+    let vbo_buffer = UsamiDevice::create_buffer(
+        &device,
         "vbo_buffer".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
@@ -93,11 +95,13 @@ fn main() -> VkResult<()> {
     let frag_shader_code =
         usami::utils::as_u32_vec(include_bytes!("../../resources/triangle/main.frag.spv"));
 
-    let vertex_shader = device.create_shader("vertex_shader".into(), &vertex_shader_code)?;
-    let frag_shader = device.create_shader("frag_shader".into(), &frag_shader_code)?;
+    let vertex_shader =
+        UsamiDevice::create_shader(&device, "vertex_shader".into(), &vertex_shader_code)?;
+    let frag_shader = UsamiDevice::create_shader(&device, "frag_shader".into(), &frag_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
-    let pipeline_layout = device.create_pipeline_layout("base_pipeline_layout".into(), &[])?;
+    let pipeline_layout =
+        UsamiDevice::create_pipeline_layout(&device, "base_pipeline_layout".into(), &[])?;
 
     let shader_stage_create_infos = [
         PipelineShaderStageCreateInfo::builder()
@@ -239,7 +243,8 @@ fn main() -> VkResult<()> {
         .dependencies(&dependencies)
         .build();
 
-    let render_pass = device.create_render_pass("render_pass".into(), render_pass_create_info)?;
+    let render_pass =
+        UsamiDevice::create_render_pass(&device, "render_pass".into(), render_pass_create_info)?;
 
     let graphics_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
         .stages(&shader_stage_create_infos)
@@ -255,7 +260,8 @@ fn main() -> VkResult<()> {
         .render_pass(render_pass.handle)
         .build();
 
-    let pipelines = device.create_graphics_pipelines(
+    let pipelines = UsamiDevice::create_graphics_pipelines(
+        &device,
         "pipeline".into(),
         PipelineCache::null(),
         &[graphics_pipeline_create_info],
@@ -263,7 +269,8 @@ fn main() -> VkResult<()> {
 
     let graphic_pipeline = &pipelines[0];
 
-    let framebuffer = device.create_framebuffer(
+    let framebuffer = UsamiDevice::create_framebuffer(
+        &device,
         "framebuffer".into(),
         FramebufferCreateInfo::builder()
             .render_pass(render_pass.handle)
@@ -274,15 +281,22 @@ fn main() -> VkResult<()> {
             .build(),
     )?;
 
-    let command_buffers = device.command_pool.allocate_command_buffers(
+    let command_pool = UsamiDevice::create_command_pool(
         &device,
+        "command_pool".into(),
+        CommandPoolCreateInfo::builder()
+            .queue_family_index(device.vk_queue_index)
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .build(),
+    )?;
+
+    let command_buffers = command_pool.allocate_command_buffers(
         "command_buffer".into(),
         CommandBufferLevel::PRIMARY,
         1,
     )?;
 
     usami::utils::record_command_buffer_with_image_dep(
-        &device,
         &command_buffers[0],
         device.presentation_image(),
         device.presentation_buffer_readback(),
@@ -347,9 +361,10 @@ fn main() -> VkResult<()> {
         },
     )?;
 
-    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
+    let fence = UsamiDevice::create_fence(&device, "fence".into(), FenceCreateFlags::empty())?;
+    let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
-    device.get_queue()?.submit(
+    queue.submit(
         &[SubmitInfo::builder()
             .command_buffers(&[command_buffers[0].handle])
             .build()],

@@ -1,9 +1,9 @@
 use ash::{
     prelude::VkResult,
     vk::{
-        self, AccessFlags, ClearColorValue, CommandBufferLevel, DependencyFlags, FenceCreateFlags,
-        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange,
-        PipelineStageFlags, SubmitInfo,
+        self, AccessFlags, ClearColorValue, CommandBufferLevel, CommandPoolCreateFlags,
+        CommandPoolCreateInfo, DependencyFlags, FenceCreateFlags, ImageAspectFlags, ImageLayout,
+        ImageMemoryBarrier, ImageSubresourceRange, PipelineStageFlags, SubmitInfo,
     },
 };
 use usami::{UsamiDevice, UsamiInstance};
@@ -15,7 +15,7 @@ fn main() -> VkResult<()> {
     let height = 500;
 
     let instance = UsamiInstance::new("simple", "usami", vk::API_VERSION_1_1, &extensions, true)?;
-    let device: UsamiDevice = UsamiDevice::new_by_filter(
+    let device = UsamiDevice::new_by_filter(
         instance,
         &[],
         width,
@@ -36,15 +36,22 @@ fn main() -> VkResult<()> {
         }),
     )?;
 
-    let command_buffers = device.command_pool.allocate_command_buffers(
+    let command_pool = UsamiDevice::create_command_pool(
         &device,
+        "command_pool".into(),
+        CommandPoolCreateInfo::builder()
+            .queue_family_index(device.vk_queue_index)
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .build(),
+    )?;
+
+    let command_buffers = command_pool.allocate_command_buffers(
         "command_buffer".into(),
         CommandBufferLevel::PRIMARY,
         1,
     )?;
 
     usami::utils::record_command_buffer_with_image_dep(
-        &device,
         &command_buffers[0],
         device.presentation_image(),
         device.presentation_buffer_readback(),
@@ -93,9 +100,10 @@ fn main() -> VkResult<()> {
         },
     )?;
 
-    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
+    let fence = UsamiDevice::create_fence(&device, "fence".into(), FenceCreateFlags::empty())?;
+    let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
-    device.get_queue()?.submit(
+    queue.submit(
         &[SubmitInfo::builder()
             .command_buffers(&[command_buffers[0].handle])
             .build()],

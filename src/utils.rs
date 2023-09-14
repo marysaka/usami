@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::VkResult,
     vk::{
@@ -10,7 +12,7 @@ use image::{EncodableLayout, ImageBuffer, RgbaImage};
 
 use crate::{
     image::{RawImageData, RawImageLevelInfo},
-    NextMultipleOf, UsamiBuffer, UsamiCommandBuffer, UsamiDevice, UsamiImage,
+    NextMultipleOf, UsamiBuffer, UsamiCommandBuffer, UsamiCommandPool, UsamiDevice, UsamiImage,
 };
 
 #[macro_export]
@@ -113,14 +115,12 @@ pub fn create_gradient_image_with_mip_levels(
 pub fn record_command_buffer_with_image_dep<
     F: Fn(&UsamiDevice, &UsamiCommandBuffer, &UsamiImage) -> ImageLayout,
 >(
-    device: &UsamiDevice,
     command_buffer: &UsamiCommandBuffer,
     image: &UsamiImage,
     buffer: &UsamiBuffer,
     callback: F,
 ) -> VkResult<()> {
     command_buffer.record(
-        device,
         CommandBufferUsageFlags::SIMULTANEOUS_USE,
         |device, command_buffer| {
             let old_image_layout = callback(device, command_buffer, image);
@@ -156,14 +156,14 @@ pub fn record_command_buffer_with_image_dep<
 }
 
 pub fn record_and_execute_command_buffer<
-    F: Fn(&UsamiDevice, &UsamiCommandBuffer) -> VkResult<()>,
+    F: Fn(&Arc<UsamiDevice>, &UsamiCommandBuffer) -> VkResult<()>,
 >(
-    device: &UsamiDevice,
+    device: &Arc<UsamiDevice>,
+    command_pool: &UsamiCommandPool,
     command_buffer_name: String,
     callback: F,
 ) -> VkResult<()> {
-    let command_buffers = device.command_pool.allocate_command_buffers(
-        device,
+    let command_buffers = command_pool.allocate_command_buffers(
         command_buffer_name.clone(),
         CommandBufferLevel::PRIMARY,
         1,
@@ -171,14 +171,17 @@ pub fn record_and_execute_command_buffer<
 
     let command_buffer = &command_buffers[0];
 
-    command_buffer.record(device, CommandBufferUsageFlags::ONE_TIME_SUBMIT, callback)?;
+    command_buffer.record(CommandBufferUsageFlags::ONE_TIME_SUBMIT, callback)?;
 
-    let fence = device.create_fence(
+    let fence = UsamiDevice::create_fence(
+        device,
         format!("{command_buffer_name}_fence"),
         FenceCreateFlags::empty(),
     )?;
 
-    device.get_queue()?.submit(
+    let queue = UsamiDevice::get_device_queue(device, "queue".into(), device.vk_queue_index, 0)?;
+
+    queue.submit(
         &[SubmitInfo::builder()
             .command_buffers(&[command_buffer.handle])
             .build()],

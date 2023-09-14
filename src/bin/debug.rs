@@ -61,7 +61,7 @@ fn main() -> VkResult<()> {
     let height = image_buffer.height();
 
     let instance = UsamiInstance::new("debug", "usami", vk::API_VERSION_1_1, &extensions, true)?;
-    let device: UsamiDevice = UsamiDevice::new_by_filter(
+    let device = UsamiDevice::new_by_filter(
         instance,
         &[],
         width,

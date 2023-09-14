@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{
@@ -7,19 +9,18 @@ use ash::{
         ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, ObjectType,
         PipelineStageFlags,
     },
-    Device,
 };
 
 use crate::{utils, UsamiBuffer, UsamiDevice, UsamiImage};
 
 pub struct UsamiCommandPool {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub handle: CommandPool,
 }
 
 impl UsamiCommandPool {
-    pub fn new(device: &Device, create_info: CommandPoolCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.create_command_pool(&create_info, None)? };
+    pub fn new(device: &Arc<UsamiDevice>, create_info: CommandPoolCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.handle.create_command_pool(&create_info, None)? };
 
         Ok(Self {
             device: device.clone(),
@@ -29,13 +30,10 @@ impl UsamiCommandPool {
 
     pub fn allocate_command_buffers(
         &self,
-        device: &UsamiDevice,
         name: String,
         level: CommandBufferLevel,
         command_buffer_count: u32,
     ) -> VkResult<Vec<UsamiCommandBuffer>> {
-        assert_eq!(self.device.handle(), device.handle.handle());
-
         let command_buffers = UsamiCommandBuffer::new(
             &self.device,
             CommandBufferAllocateInfo::builder()
@@ -46,7 +44,7 @@ impl UsamiCommandPool {
         )?;
 
         for (idx, command_buffer) in command_buffers.iter().enumerate() {
-            device.set_debug_name(
+            self.device.set_debug_name(
                 format!("{name}_{idx}"),
                 command_buffer.handle.as_raw(),
                 ObjectType::COMMAND_BUFFER,
@@ -59,19 +57,22 @@ impl UsamiCommandPool {
 
 impl Drop for UsamiCommandPool {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_command_pool(self.handle, None) }
+        unsafe { self.device.handle.destroy_command_pool(self.handle, None) }
     }
 }
 
 pub struct UsamiCommandBuffer {
-    device: Device,
+    device: Arc<UsamiDevice>,
     command_pool: CommandPool,
     pub handle: CommandBuffer,
 }
 
 impl UsamiCommandBuffer {
-    pub fn new(device: &Device, allocate_info: CommandBufferAllocateInfo) -> VkResult<Vec<Self>> {
-        let result = unsafe { device.allocate_command_buffers(&allocate_info)? };
+    pub fn new(
+        device: &Arc<UsamiDevice>,
+        allocate_info: CommandBufferAllocateInfo,
+    ) -> VkResult<Vec<Self>> {
+        let result = unsafe { device.handle.allocate_command_buffers(&allocate_info)? };
 
         Ok(result
             .iter()
@@ -83,21 +84,20 @@ impl UsamiCommandBuffer {
             .collect())
     }
 
-    pub fn record<F: Fn(&UsamiDevice, &UsamiCommandBuffer) -> VkResult<()>>(
+    pub fn record<F: Fn(&Arc<UsamiDevice>, &UsamiCommandBuffer) -> VkResult<()>>(
         &self,
-        device: &UsamiDevice,
         flags: CommandBufferUsageFlags,
         callback: F,
     ) -> VkResult<()> {
         unsafe {
-            self.device.begin_command_buffer(
+            self.device.handle.begin_command_buffer(
                 self.handle,
                 &CommandBufferBeginInfo::builder().flags(flags).build(),
             )?;
 
-            callback(device, self)?;
+            callback(&self.device, self)?;
 
-            self.device.end_command_buffer(self.handle)?;
+            self.device.handle.end_command_buffer(self.handle)?;
         }
 
         Ok(())
@@ -125,7 +125,7 @@ impl UsamiCommandBuffer {
         );
 
         unsafe {
-            self.device.cmd_pipeline_barrier(
+            self.device.handle.cmd_pipeline_barrier(
                 self.handle,
                 src_stage_mask,
                 dst_stage_mask,
@@ -159,7 +159,7 @@ impl UsamiCommandBuffer {
         size: u64,
     ) -> VkResult<()> {
         unsafe {
-            self.device.cmd_pipeline_barrier(
+            self.device.handle.cmd_pipeline_barrier(
                 self.handle,
                 src_stage_mask,
                 dst_stage_mask,
@@ -204,7 +204,7 @@ impl UsamiCommandBuffer {
             .build();
 
         unsafe {
-            self.device.cmd_pipeline_barrier(
+            self.device.handle.cmd_pipeline_barrier(
                 self.handle,
                 PipelineStageFlags::HOST,
                 PipelineStageFlags::TRANSFER,
@@ -231,7 +231,7 @@ impl UsamiCommandBuffer {
                     .build()],
             );
 
-            self.device.cmd_copy_buffer_to_image(
+            self.device.handle.cmd_copy_buffer_to_image(
                 self.handle,
                 buffer.handle,
                 dest_image.handle,
@@ -286,7 +286,7 @@ impl UsamiCommandBuffer {
         )?;
 
         unsafe {
-            self.device.cmd_copy_image_to_buffer(
+            self.device.handle.cmd_copy_image_to_buffer(
                 self.handle,
                 image.handle,
                 ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -312,6 +312,7 @@ impl Drop for UsamiCommandBuffer {
     fn drop(&mut self) {
         unsafe {
             self.device
+                .handle
                 .free_command_buffers(self.command_pool, &[self.handle])
         }
     }
@@ -319,26 +320,28 @@ impl Drop for UsamiCommandBuffer {
 
 impl UsamiDevice {
     pub fn create_command_pool(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: CommandPoolCreateInfo,
     ) -> VkResult<UsamiCommandPool> {
-        let shader = UsamiCommandPool::new(&self.handle, create_info)?;
+        let shader = UsamiCommandPool::new(device, create_info)?;
 
-        self.set_debug_name(name, shader.handle.as_raw(), ObjectType::COMMAND_POOL)?;
+        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::COMMAND_POOL)?;
 
         Ok(shader)
     }
 
     pub fn copy_buffer_to_image(
-        &self,
+        device: &Arc<UsamiDevice>,
+        command_pool: &UsamiCommandPool,
         buffer: &UsamiBuffer,
         image: &UsamiImage,
         new_layout: ImageLayout,
         copy_regions: &[BufferImageCopy],
     ) -> VkResult<()> {
         utils::record_and_execute_command_buffer(
-            self,
+            device,
+            command_pool,
             "b2i_cmd_buffer".into(),
             |_, command_buffer| {
                 command_buffer.copy_buffer_to_image(

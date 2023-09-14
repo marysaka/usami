@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{
@@ -5,19 +7,25 @@ use ash::{
         DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutCreateInfo, Handle,
         ObjectType,
     },
-    Device,
 };
 
 use crate::UsamiDevice;
 
 pub struct UsamiDescriptorSetLayout {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub handle: DescriptorSetLayout,
 }
 
 impl UsamiDescriptorSetLayout {
-    pub fn new(device: &Device, create_info: DescriptorSetLayoutCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
+    pub fn new(
+        device: &Arc<UsamiDevice>,
+        create_info: DescriptorSetLayoutCreateInfo,
+    ) -> VkResult<Self> {
+        let handle = unsafe {
+            device
+                .handle
+                .create_descriptor_set_layout(&create_info, None)?
+        };
 
         Ok(Self {
             device: device.clone(),
@@ -28,19 +36,23 @@ impl UsamiDescriptorSetLayout {
 
 impl Drop for UsamiDescriptorSetLayout {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_descriptor_set_layout(self.handle, None) }
+        unsafe {
+            self.device
+                .handle
+                .destroy_descriptor_set_layout(self.handle, None)
+        }
     }
 }
 
 pub struct UsamiDescriptorPool {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub handle: DescriptorPool,
     should_free_sets: bool,
 }
 
 impl UsamiDescriptorPool {
-    pub fn new(device: &Device, create_info: DescriptorPoolCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.create_descriptor_pool(&create_info, None)? };
+    pub fn new(device: &Arc<UsamiDevice>, create_info: DescriptorPoolCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.handle.create_descriptor_pool(&create_info, None)? };
 
         Ok(Self {
             device: device.clone(),
@@ -53,12 +65,9 @@ impl UsamiDescriptorPool {
 
     pub fn allocate_descriptor_sets(
         &self,
-        device: &UsamiDevice,
         name: String,
         layouts: &[DescriptorSetLayout],
     ) -> VkResult<Vec<UsamiDescriptorSet>> {
-        assert_eq!(self.device.handle(), device.handle.handle());
-
         let command_buffers = UsamiDescriptorSet::new(
             &self.device,
             DescriptorSetAllocateInfo::builder()
@@ -69,7 +78,7 @@ impl UsamiDescriptorPool {
         )?;
 
         for (idx, command_buffer) in command_buffers.iter().enumerate() {
-            device.set_debug_name(
+            self.device.set_debug_name(
                 format!("{name}_{idx}"),
                 command_buffer.handle.as_raw(),
                 ObjectType::DESCRIPTOR_SET,
@@ -82,12 +91,16 @@ impl UsamiDescriptorPool {
 
 impl Drop for UsamiDescriptorPool {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_descriptor_pool(self.handle, None) }
+        unsafe {
+            self.device
+                .handle
+                .destroy_descriptor_pool(self.handle, None)
+        }
     }
 }
 
 pub struct UsamiDescriptorSet {
-    device: Device,
+    device: Arc<UsamiDevice>,
     descriptor_pool: DescriptorPool,
     pub handle: DescriptorSet,
     pub should_free_on_drop: bool,
@@ -95,11 +108,11 @@ pub struct UsamiDescriptorSet {
 
 impl UsamiDescriptorSet {
     pub fn new(
-        device: &Device,
+        device: &Arc<UsamiDevice>,
         allocate_info: DescriptorSetAllocateInfo,
         should_free_on_drop: bool,
     ) -> VkResult<Vec<Self>> {
-        let result = unsafe { device.allocate_descriptor_sets(&allocate_info)? };
+        let result = unsafe { device.handle.allocate_descriptor_sets(&allocate_info)? };
 
         Ok(result
             .iter()
@@ -118,6 +131,7 @@ impl Drop for UsamiDescriptorSet {
         if self.should_free_on_drop {
             unsafe {
                 self.device
+                    .handle
                     .free_descriptor_sets(self.descriptor_pool, &[self.handle])
                     .expect("Cannot free descriptor set");
             }
@@ -127,25 +141,25 @@ impl Drop for UsamiDescriptorSet {
 
 impl UsamiDevice {
     pub fn create_descriptor_pool(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: DescriptorPoolCreateInfo,
     ) -> VkResult<UsamiDescriptorPool> {
-        let shader = UsamiDescriptorPool::new(&self.handle, create_info)?;
+        let shader = UsamiDescriptorPool::new(device, create_info)?;
 
-        self.set_debug_name(name, shader.handle.as_raw(), ObjectType::DESCRIPTOR_POOL)?;
+        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::DESCRIPTOR_POOL)?;
 
         Ok(shader)
     }
 
     pub fn create_descriptor_set_layout(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: DescriptorSetLayoutCreateInfo,
     ) -> VkResult<UsamiDescriptorSetLayout> {
-        let layout = UsamiDescriptorSetLayout::new(&self.handle, create_info)?;
+        let layout = UsamiDescriptorSetLayout::new(device, create_info)?;
 
-        self.set_debug_name(
+        device.set_debug_name(
             name,
             layout.handle.as_raw(),
             ObjectType::DESCRIPTOR_SET_LAYOUT,

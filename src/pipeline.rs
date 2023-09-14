@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{
@@ -5,24 +7,23 @@ use ash::{
         ObjectType, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
         PipelineLayoutCreateInfo,
     },
-    Device,
 };
 
 use crate::UsamiDevice;
 
 pub struct UsamiPipelineLayout {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub handle: PipelineLayout,
 }
 
 impl UsamiPipelineLayout {
-    pub fn new(device: &Device, layouts: &[DescriptorSetLayout]) -> VkResult<Self> {
+    pub fn new(device: &Arc<UsamiDevice>, layouts: &[DescriptorSetLayout]) -> VkResult<Self> {
         let create_info = PipelineLayoutCreateInfo::builder()
             .set_layouts(layouts)
             .flags(PipelineLayoutCreateFlags::empty())
             .build();
 
-        let handle = unsafe { device.create_pipeline_layout(&create_info, None)? };
+        let handle = unsafe { device.handle.create_pipeline_layout(&create_info, None)? };
 
         Ok(Self {
             device: device.clone(),
@@ -33,23 +34,28 @@ impl UsamiPipelineLayout {
 
 impl Drop for UsamiPipelineLayout {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_pipeline_layout(self.handle, None) }
+        unsafe {
+            self.device
+                .handle
+                .destroy_pipeline_layout(self.handle, None)
+        }
     }
 }
 
 pub struct UsamiPipeline {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub handle: Pipeline,
 }
 
 impl UsamiPipeline {
     pub fn new_graphics(
-        device: &Device,
+        device: &Arc<UsamiDevice>,
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
     ) -> VkResult<Vec<Self>> {
         let result = unsafe {
             device
+                .handle
                 .create_graphics_pipelines(pipeline_cache, create_infos, None)
                 .map_err(|(_, x)| x)?
         };
@@ -64,12 +70,13 @@ impl UsamiPipeline {
     }
 
     pub fn new_compute(
-        device: &Device,
+        device: &Arc<UsamiDevice>,
         pipeline_cache: PipelineCache,
         create_infos: &[ComputePipelineCreateInfo],
     ) -> VkResult<Vec<Self>> {
         let result = unsafe {
             device
+                .handle
                 .create_compute_pipelines(pipeline_cache, create_infos, None)
                 .map_err(|(_, x)| x)?
         };
@@ -86,19 +93,19 @@ impl UsamiPipeline {
 
 impl Drop for UsamiPipeline {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_pipeline(self.handle, None) }
+        unsafe { self.device.handle.destroy_pipeline(self.handle, None) }
     }
 }
 
 impl UsamiDevice {
     pub fn create_pipeline_layout(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         layouts: &[DescriptorSetLayout],
     ) -> VkResult<UsamiPipelineLayout> {
-        let pipeline_layout = UsamiPipelineLayout::new(&self.handle, layouts)?;
+        let pipeline_layout = UsamiPipelineLayout::new(device, layouts)?;
 
-        self.set_debug_name(
+        device.set_debug_name(
             name,
             pipeline_layout.handle.as_raw(),
             ObjectType::PIPELINE_LAYOUT,
@@ -108,15 +115,15 @@ impl UsamiDevice {
     }
 
     pub fn create_compute_pipelines(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         pipeline_cache: PipelineCache,
         create_infos: &[ComputePipelineCreateInfo],
     ) -> VkResult<Vec<UsamiPipeline>> {
-        let pipelines = UsamiPipeline::new_compute(&self.handle, pipeline_cache, create_infos)?;
+        let pipelines = UsamiPipeline::new_compute(device, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
-            self.set_debug_name(
+            device.set_debug_name(
                 format!("{name}_{idx}"),
                 pipeline.handle.as_raw(),
                 ObjectType::PIPELINE,
@@ -127,15 +134,15 @@ impl UsamiDevice {
     }
 
     pub fn create_graphics_pipelines(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         pipeline_cache: PipelineCache,
         create_infos: &[GraphicsPipelineCreateInfo],
     ) -> VkResult<Vec<UsamiPipeline>> {
-        let pipelines = UsamiPipeline::new_graphics(&self.handle, pipeline_cache, create_infos)?;
+        let pipelines = UsamiPipeline::new_graphics(device, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
-            self.set_debug_name(
+            device.set_debug_name(
                 format!("{name}_{idx}"),
                 pipeline.handle.as_raw(),
                 ObjectType::PIPELINE,

@@ -1,20 +1,22 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent2D, Extent3D,
-        Format, Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout,
-        ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags,
-        ImageView, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
-        ObjectType, SampleCountFlags, SharingMode,
+        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent3D, Format,
+        Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
+        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
+        SampleCountFlags, SharingMode,
     },
     Device,
 };
 use image::{RgbImage, RgbaImage};
 
-use crate::{utils, UsamiDevice, UsamiDeviceMemory};
+use crate::{utils, UsamiCommandPool, UsamiDevice, UsamiDeviceMemory};
 
 pub struct UsamiImage {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub create_info: ImageCreateInfo,
     pub handle: Image,
     pub device_memory: UsamiDeviceMemory,
@@ -22,7 +24,7 @@ pub struct UsamiImage {
 
 impl UsamiImage {
     pub fn new(
-        device: &UsamiDevice,
+        device: &Arc<UsamiDevice>,
         create_info: ImageCreateInfo,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
@@ -36,7 +38,7 @@ impl UsamiImage {
         }
 
         Ok(Self {
-            device: device.handle.clone(),
+            device: device.clone(),
             create_info,
             handle,
             device_memory,
@@ -45,14 +47,14 @@ impl UsamiImage {
 
     pub fn create_simple_image_view(
         &self,
-        device: &UsamiDevice,
         name: String,
         view_type: ImageViewType,
         subresource_range: ImageSubresourceRange,
         components: ComponentMapping,
         flags: ImageViewCreateFlags,
     ) -> VkResult<UsamiImageView> {
-        device.create_image_view(
+        UsamiDevice::create_image_view(
+            &self.device,
             name,
             ImageViewCreateInfo::builder()
                 .format(self.create_info.format)
@@ -89,19 +91,19 @@ impl UsamiImage {
 
 impl Drop for UsamiImage {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_image(self.handle, None) }
+        unsafe { self.device.handle.destroy_image(self.handle, None) }
     }
 }
 
 pub struct UsamiImageView {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub create_info: ImageViewCreateInfo,
     pub handle: ImageView,
 }
 
 impl UsamiImageView {
-    pub fn new(device: &Device, create_info: ImageViewCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.create_image_view(&create_info, None)? };
+    pub fn new(device: &Arc<UsamiDevice>, create_info: ImageViewCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.handle.create_image_view(&create_info, None)? };
 
         Ok(Self {
             device: device.clone(),
@@ -113,38 +115,39 @@ impl UsamiImageView {
 
 impl Drop for UsamiImageView {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_image_view(self.handle, None) }
+        unsafe { self.device.handle.destroy_image_view(self.handle, None) }
     }
 }
 
 impl UsamiDevice {
     pub fn create_image(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: ImageCreateInfo,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<UsamiImage> {
-        let image = UsamiImage::new(self, create_info, memory_flags)?;
+        let image = UsamiImage::new(device, create_info, memory_flags)?;
 
-        self.set_debug_name(name, image.handle.as_raw(), ObjectType::IMAGE)?;
+        device.set_debug_name(name, image.handle.as_raw(), ObjectType::IMAGE)?;
 
         Ok(image)
     }
 
     pub fn create_image_view(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: ImageViewCreateInfo,
     ) -> VkResult<UsamiImageView> {
-        let image_view = UsamiImageView::new(&self.handle, create_info)?;
+        let image_view = UsamiImageView::new(device, create_info)?;
 
-        self.set_debug_name(name, image_view.handle.as_raw(), ObjectType::IMAGE_VIEW)?;
+        device.set_debug_name(name, image_view.handle.as_raw(), ObjectType::IMAGE_VIEW)?;
 
         Ok(image_view)
     }
 
     pub fn import_image(
-        &self,
+        device: &Arc<UsamiDevice>,
+        command_pool: &UsamiCommandPool,
         name: String,
         raw_image: &RawImageData,
         usage: ImageUsageFlags,
@@ -153,22 +156,24 @@ impl UsamiDevice {
         let image_create_info = ImageCreateInfo::builder()
             .image_type(ImageType::TYPE_2D)
             .format(raw_image.format)
-            .extent(raw_image.level_infos[0].extent.into())
+            .extent(raw_image.level_infos[0].extent)
             .mip_levels(raw_image.level_count() as u32)
             .array_layers(1)
             .initial_layout(ImageLayout::UNDEFINED)
             .samples(SampleCountFlags::TYPE_1)
             .tiling(ImageTiling::OPTIMAL)
             .usage(usage | ImageUsageFlags::TRANSFER_DST)
-            .queue_family_indices(&[self.vk_queue_index])
+            .queue_family_indices(&[device.vk_queue_index])
             .build();
-        let image = self.create_image(
+        let image = Self::create_image(
+            device,
             name.clone(),
             image_create_info,
             MemoryPropertyFlags::empty(),
         )?;
 
-        let temporary_buffer = self.create_buffer(
+        let temporary_buffer = Self::create_buffer(
+            device,
             format!("{name}_temp_buffer"),
             BufferCreateFlags::empty(),
             SharingMode::EXCLUSIVE,
@@ -176,7 +181,9 @@ impl UsamiDevice {
             &raw_image.data,
         )?;
 
-        self.copy_buffer_to_image(
+        UsamiDevice::copy_buffer_to_image(
+            device,
+            command_pool,
             &temporary_buffer,
             &image,
             layout,

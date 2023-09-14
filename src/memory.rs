@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::{ffi::c_void, sync::Arc};
 
 use ash::{
     prelude::*,
@@ -6,14 +6,12 @@ use ash::{
         self, DeviceMemory, MappedMemoryRange, MemoryAllocateInfo, MemoryMapFlags,
         MemoryPropertyFlags, MemoryRequirements,
     },
-    Device,
 };
 
 use crate::UsamiDevice;
 
 pub struct UsamiDeviceMemory {
-    // TODO: Arc
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub requirements: MemoryRequirements,
     pub allocate_info: MemoryAllocateInfo,
     pub handle: DeviceMemory,
@@ -21,7 +19,7 @@ pub struct UsamiDeviceMemory {
 
 impl UsamiDeviceMemory {
     pub fn new(
-        device: &UsamiDevice,
+        device: &Arc<UsamiDevice>,
         requirements: MemoryRequirements,
         flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
@@ -33,7 +31,7 @@ impl UsamiDeviceMemory {
         let handle = unsafe { device.handle.allocate_memory(&allocate_info, None)? };
 
         Ok(Self {
-            device: device.handle.clone(),
+            device: device.clone(),
             requirements,
             allocate_info,
             handle,
@@ -44,7 +42,7 @@ impl UsamiDeviceMemory {
     ///
     /// Must be called once.
     pub unsafe fn map(&self) -> VkResult<*mut c_void> {
-        self.device.map_memory(
+        self.device.handle.map_memory(
             self.handle,
             0,
             self.allocate_info.allocation_size,
@@ -56,12 +54,13 @@ impl UsamiDeviceMemory {
     ///
     /// Must be called after a sucessful [Self::map].
     pub unsafe fn unmap(&self) {
-        self.device.unmap_memory(self.handle)
+        self.device.handle.unmap_memory(self.handle)
     }
 
     pub fn flush(&self, offset: u64, size: u64) -> VkResult<()> {
         unsafe {
             self.device
+                .handle
                 .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
                     .memory(self.handle)
                     .offset(offset)
@@ -73,6 +72,7 @@ impl UsamiDeviceMemory {
     pub fn invalidate(&self, offset: u64, size: u64) -> VkResult<()> {
         unsafe {
             self.device
+                .handle
                 .invalidate_mapped_memory_ranges(&[MappedMemoryRange::builder()
                     .memory(self.handle)
                     .offset(offset)
@@ -105,7 +105,7 @@ impl UsamiDeviceMemory {
 impl Drop for UsamiDeviceMemory {
     fn drop(&mut self) {
         unsafe {
-            self.device.free_memory(self.handle, None);
+            self.device.handle.free_memory(self.handle, None);
         }
     }
 }

@@ -28,7 +28,7 @@ fn main() -> VkResult<()> {
     let height = 1;
 
     let instance = UsamiInstance::new("mipmap", "usami", vk::API_VERSION_1_1, &extensions, true)?;
-    let device: UsamiDevice = UsamiDevice::new_by_filter(
+    let device = UsamiDevice::new_by_filter(
         instance,
         &[],
         width,
@@ -51,16 +51,28 @@ fn main() -> VkResult<()> {
 
     let mipmap_count = utils::compute_mip_pyramid_levels(width, height);
 
+    let command_pool = UsamiDevice::create_command_pool(
+        &device,
+        "command_pool".into(),
+        CommandPoolCreateInfo::builder()
+            .queue_family_index(device.vk_queue_index)
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .build(),
+    )?;
+
     let gradient_raw_image =
         utils::create_gradient_image_with_mip_levels(width, height, mipmap_count);
-    let gradient_image = device.import_image(
+    let gradient_image = UsamiDevice::import_image(
+        &device,
+        &command_pool,
         "gradient_image".into(),
         &gradient_raw_image,
         ImageUsageFlags::SAMPLED | ImageUsageFlags::TRANSFER_SRC,
         ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     )?;
 
-    let gradient_readback_buffer = device.create_buffer_with_size(
+    let gradient_readback_buffer = UsamiDevice::create_buffer_with_size(
+        &device,
         "gradient_readback_buffer".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
@@ -69,22 +81,13 @@ fn main() -> VkResult<()> {
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    let command_pool = device.create_command_pool(
-        "command_pool".into(),
-        CommandPoolCreateInfo::builder()
-            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .build(),
-    )?;
-
     let command_buffers = command_pool.allocate_command_buffers(
-        &device,
         "command_buffer".into(),
         CommandBufferLevel::PRIMARY,
         1,
     )?;
 
     command_buffers[0].record(
-        &device,
         CommandBufferUsageFlags::ONE_TIME_SUBMIT,
         |_, command_buffer| {
             command_buffer.copy_image_to_buffer(
@@ -103,9 +106,10 @@ fn main() -> VkResult<()> {
         },
     )?;
 
-    let fence = device.create_fence("fence".into(), FenceCreateFlags::empty())?;
+    let fence = UsamiDevice::create_fence(&device, "fence".into(), FenceCreateFlags::empty())?;
+    let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
-    device.get_queue()?.submit(
+    queue.submit(
         &[SubmitInfo::builder()
             .command_buffers(&[command_buffers[0].handle])
             .build()],

@@ -1,20 +1,21 @@
+use std::sync::Arc;
+
 use ash::{
     prelude::*,
     vk::{Framebuffer, FramebufferCreateInfo, Handle, ObjectType},
-    Device,
 };
 
 use crate::UsamiDevice;
 
 pub struct UsamiFramebuffer {
-    device: Device,
+    device: Arc<UsamiDevice>,
     pub create_info: FramebufferCreateInfo,
     pub handle: Framebuffer,
 }
 
 impl UsamiFramebuffer {
-    pub fn new(device: &Device, create_info: FramebufferCreateInfo) -> VkResult<Self> {
-        let handle = unsafe { device.create_framebuffer(&create_info, None)? };
+    pub fn new(device: &Arc<UsamiDevice>, create_info: FramebufferCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.handle.create_framebuffer(&create_info, None)? };
 
         Ok(Self {
             device: device.clone(),
@@ -26,19 +27,19 @@ impl UsamiFramebuffer {
 
 impl Drop for UsamiFramebuffer {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_framebuffer(self.handle, None) }
+        unsafe { self.device.handle.destroy_framebuffer(self.handle, None) }
     }
 }
 
 impl UsamiDevice {
     pub fn create_framebuffer(
-        &self,
+        device: &Arc<UsamiDevice>,
         name: String,
         create_info: FramebufferCreateInfo,
     ) -> VkResult<UsamiFramebuffer> {
-        let framebuffer = UsamiFramebuffer::new(&self.handle, create_info)?;
+        let framebuffer = UsamiFramebuffer::new(device, create_info)?;
 
-        self.set_debug_name(name, framebuffer.handle.as_raw(), ObjectType::FRAMEBUFFER)?;
+        device.set_debug_name(name, framebuffer.handle.as_raw(), ObjectType::FRAMEBUFFER)?;
 
         Ok(framebuffer)
     }
