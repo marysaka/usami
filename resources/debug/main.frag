@@ -15,6 +15,6 @@ layout(set = 1, binding = 0) uniform highp sampler2D u_sampler;
 
 void main(void)
 {
-    highp vec2 texCoord = v_texCoord.yx;
-    u_fragColor = texture(u_sampler, texCoord) * u_colorScale + u_colorBias;
+    highp vec2 texCoord = v_texCoord;
+    u_fragColor = vec4(texture(u_sampler, texCoord)) * u_colorScale + u_colorBias;
 }

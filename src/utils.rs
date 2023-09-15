@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, fs::File, io::Read};
 
 use ash::{
     prelude::VkResult,
@@ -24,6 +24,15 @@ macro_rules! offset_of {
             std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
         }
     }};
+}
+
+pub fn read_spv_file(file_path: &str) -> Vec<u32> {
+    let mut data = Vec::new();
+
+    let mut file = File::open(file_path).unwrap();
+    file.read_to_end(&mut data).unwrap();
+
+    as_u32_vec(&data)
 }
 
 pub fn as_u32_vec(data: &[u8]) -> Vec<u32> {
