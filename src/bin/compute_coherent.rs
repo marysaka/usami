@@ -32,7 +32,6 @@ fn main() -> VkResult<()> {
     let extensions = ["VK_EXT_debug_utils".into()];
 
     let width = 128;
-    let height = 1;
 
     let (group_count_x, group_count_y, group_count_z) = (1, 1, 1);
 
@@ -46,8 +45,6 @@ fn main() -> VkResult<()> {
     let device = UsamiDevice::new_by_filter(
         instance,
         &[],
-        width,
-        height,
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties

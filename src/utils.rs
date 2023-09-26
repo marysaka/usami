@@ -1,4 +1,4 @@
-use std::{sync::Arc, fs::File, io::Read};
+use std::{fs::File, io::Read, sync::Arc};
 
 use ash::{
     prelude::VkResult,
@@ -146,8 +146,8 @@ pub fn record_command_buffer_with_image_dep<
                             .build(),
                     )
                     .image_extent(Extent3D {
-                        width: device.width,
-                        height: device.height,
+                        width: image.create_info.extent.width,
+                        height: image.create_info.extent.height,
                         depth: 1,
                     })
                     .build()],

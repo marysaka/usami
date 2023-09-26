@@ -6,7 +6,7 @@ use ash::{
         ImageMemoryBarrier, ImageSubresourceRange, PipelineStageFlags, SubmitInfo,
     },
 };
-use usami::{UsamiDevice, UsamiInstance};
+use usami::{UsamiDevice, UsamiInstance, UsamiPresentation};
 
 fn main() -> VkResult<()> {
     let extensions = ["VK_EXT_debug_utils".into()];
@@ -18,8 +18,6 @@ fn main() -> VkResult<()> {
     let device = UsamiDevice::new_by_filter(
         instance,
         &[],
-        width,
-        height,
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -35,6 +33,7 @@ fn main() -> VkResult<()> {
                 .map(|x| (physical_device, x))
         }),
     )?;
+    let presentation = UsamiPresentation::new(&device, width, height)?;
 
     let command_pool = UsamiDevice::create_command_pool(
         &device,
@@ -53,8 +52,8 @@ fn main() -> VkResult<()> {
 
     usami::utils::record_command_buffer_with_image_dep(
         &command_buffers[0],
-        device.presentation_image(),
-        device.presentation_buffer_readback(),
+        &presentation.image,
+        &presentation.buffer_readback,
         |device, command_buffer, image| {
             let image_subresource_range = ImageSubresourceRange::builder()
                 .base_array_layer(0)
@@ -112,7 +111,7 @@ fn main() -> VkResult<()> {
     fence.wait(u64::MAX)?;
     fence.reset()?;
 
-    let res: Vec<u8> = device.read_image_memory()?;
+    let res = presentation.buffer_readback.device_memory.read_to_vec()?;
 
     image::save_buffer_with_format(
         "output.bmp",

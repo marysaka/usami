@@ -31,8 +31,6 @@ fn main() -> VkResult<()> {
     let device = UsamiDevice::new_by_filter(
         instance,
         &[],
-        width,
-        height,
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties

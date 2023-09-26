@@ -1,6 +1,5 @@
 use std::{
     ffi::{c_char, CString},
-    mem::MaybeUninit,
     sync::Arc,
 };
 
@@ -8,15 +7,19 @@ use ash::{
     prelude::*,
     vk::{
         BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent3D, Format,
-        ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType,
-        ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags, ObjectType,
-        PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties,
-        PhysicalDeviceProperties, QueueFamilyProperties, SampleCountFlags, SharingMode,
+        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent2D, Extent3D,
+        Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
+        MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
+        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, QueueFamilyProperties, Rect2D,
+        SampleCountFlags, SharingMode, Viewport,
     },
 };
 
-use crate::{UsamiBuffer, UsamiImage, UsamiImageView, UsamiInstance};
+use crate::{
+    utils, UsamiBuffer, UsamiFramebuffer, UsamiImage, UsamiImageView, UsamiInstance,
+    UsamiRenderPass,
+};
 
 pub struct UsamiPhysicalDevice {
     pub handle: PhysicalDevice,
@@ -27,24 +30,16 @@ pub struct UsamiPhysicalDevice {
 }
 
 pub struct UsamiDevice {
-    pub width: u32,
-    pub height: u32,
-
     pub instance: UsamiInstance,
     pub physical_device: UsamiPhysicalDevice,
     pub handle: ash::Device,
     pub vk_queue_index: u32,
-    pub presentation_image: MaybeUninit<UsamiImage>,
-    pub presentation_image_view: MaybeUninit<UsamiImageView>,
-    pub presentation_buffer_readback: MaybeUninit<UsamiBuffer>,
 }
 
 impl UsamiDevice {
     pub fn new_by_filter(
         instance: UsamiInstance,
         extensions: &[String],
-        width: u32,
-        height: u32,
         should_grab: Box<dyn FnMut(UsamiPhysicalDevice) -> Option<(UsamiPhysicalDevice, u32)>>,
     ) -> VkResult<Arc<Self>> {
         let (physical_device, vk_queue_index) =
@@ -101,102 +96,12 @@ impl UsamiDevice {
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
-        let result = Arc::new(Self {
-            width,
-            height,
+        Ok(Arc::new(Self {
             instance,
             physical_device,
             handle,
             vk_queue_index,
-            presentation_image: MaybeUninit::uninit(),
-            presentation_image_view: MaybeUninit::uninit(),
-            presentation_buffer_readback: MaybeUninit::uninit(),
-        });
-
-        let presentation_image_info = ImageCreateInfo::builder()
-            .image_type(ImageType::TYPE_2D)
-            .format(Format::R8G8B8A8_UNORM)
-            .extent(Extent3D {
-                width,
-                height,
-                depth: 1,
-            })
-            .mip_levels(1)
-            .array_layers(1)
-            .samples(SampleCountFlags::TYPE_1)
-            .tiling(ImageTiling::OPTIMAL)
-            .usage(
-                ImageUsageFlags::COLOR_ATTACHMENT
-                    | ImageUsageFlags::SAMPLED
-                    | ImageUsageFlags::TRANSFER_DST
-                    | ImageUsageFlags::TRANSFER_SRC,
-            )
-            .build();
-
-        let presentation_image = Self::create_image(
-            &result,
-            "presentation_image".into(),
-            presentation_image_info,
-            MemoryPropertyFlags::empty(),
-        )?;
-
-        let presentation_image_view = presentation_image.create_simple_image_view(
-            "presentation_image_view".into(),
-            ImageViewType::TYPE_2D,
-            ImageSubresourceRange::builder()
-                .aspect_mask(ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(presentation_image_info.mip_levels)
-                .base_array_layer(0)
-                .layer_count(presentation_image_info.array_layers)
-                .build(),
-            ComponentMapping::builder()
-                .r(ComponentSwizzle::IDENTITY)
-                .g(ComponentSwizzle::IDENTITY)
-                .b(ComponentSwizzle::IDENTITY)
-                .a(ComponentSwizzle::IDENTITY)
-                .build(),
-            ImageViewCreateFlags::empty(),
-        )?;
-
-        let presentation_buffer_readback = Self::create_buffer_with_size(
-            &result,
-            "presentation_buffer_readback".into(),
-            BufferCreateFlags::empty(),
-            SharingMode::EXCLUSIVE,
-            BufferUsageFlags::TRANSFER_DST,
-            u64::from(width * height * 4),
-            MemoryPropertyFlags::HOST_VISIBLE,
-        )?;
-
-        // TODO: move all the presentation to another struct.
-        let device_mutable = unsafe {
-            // SAFETY: nothing else is mutating state at this point of the execution.
-            &mut *(Arc::as_ptr(&result) as *mut UsamiDevice)
-        };
-
-        device_mutable.presentation_image.write(presentation_image);
-        device_mutable
-            .presentation_image_view
-            .write(presentation_image_view);
-
-        device_mutable
-            .presentation_buffer_readback
-            .write(presentation_buffer_readback);
-
-        Ok(result)
-    }
-
-    pub fn presentation_image(&self) -> &UsamiImage {
-        unsafe { self.presentation_image.assume_init_ref() }
-    }
-
-    pub fn presentation_image_view(&self) -> &UsamiImageView {
-        unsafe { self.presentation_image_view.assume_init_ref() }
-    }
-
-    pub fn presentation_buffer_readback(&self) -> &UsamiBuffer {
-        unsafe { self.presentation_buffer_readback.assume_init_ref() }
+        }))
     }
 
     pub fn set_debug_name(
@@ -220,21 +125,130 @@ impl UsamiDevice {
                 )
         }
     }
-
-    pub fn read_image_memory(&self) -> VkResult<Vec<u8>> {
-        self.presentation_buffer_readback()
-            .device_memory
-            .read_to_vec()
-    }
 }
 
 impl Drop for UsamiDevice {
     fn drop(&mut self) {
         unsafe {
-            self.presentation_image_view.assume_init_drop();
-            self.presentation_buffer_readback.assume_init_drop();
-            self.presentation_image.assume_init_drop();
             self.handle.destroy_device(None);
         }
+    }
+}
+
+pub struct UsamiPresentation {
+    pub image: UsamiImage,
+    pub image_view: UsamiImageView,
+    pub buffer_readback: UsamiBuffer,
+}
+
+impl UsamiPresentation {
+    pub fn new(device: &Arc<UsamiDevice>, width: u32, height: u32) -> VkResult<Self> {
+        let format = Format::R8G8B8A8_UNORM;
+        let presentation_image_info = ImageCreateInfo::builder()
+            .image_type(ImageType::TYPE_2D)
+            .format(format)
+            .extent(Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(SampleCountFlags::TYPE_1)
+            .tiling(ImageTiling::OPTIMAL)
+            .usage(
+                ImageUsageFlags::COLOR_ATTACHMENT
+                    | ImageUsageFlags::SAMPLED
+                    | ImageUsageFlags::TRANSFER_DST
+                    | ImageUsageFlags::TRANSFER_SRC,
+            )
+            .build();
+
+        let image = UsamiDevice::create_image(
+            device,
+            "presentation_image".into(),
+            presentation_image_info,
+            MemoryPropertyFlags::empty(),
+        )?;
+
+        let image_view = image.create_simple_image_view(
+            "presentation_image_view".into(),
+            ImageViewType::TYPE_2D,
+            ImageSubresourceRange::builder()
+                .aspect_mask(ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(presentation_image_info.mip_levels)
+                .base_array_layer(0)
+                .layer_count(presentation_image_info.array_layers)
+                .build(),
+            ComponentMapping::builder()
+                .r(ComponentSwizzle::IDENTITY)
+                .g(ComponentSwizzle::IDENTITY)
+                .b(ComponentSwizzle::IDENTITY)
+                .a(ComponentSwizzle::IDENTITY)
+                .build(),
+            ImageViewCreateFlags::empty(),
+        )?;
+
+        let buffer_readback = UsamiDevice::create_buffer_with_size(
+            device,
+            "presentation_buffer_readback".into(),
+            BufferCreateFlags::empty(),
+            SharingMode::EXCLUSIVE,
+            BufferUsageFlags::TRANSFER_DST,
+            u64::from(width * height * utils::get_format_size(format)),
+            MemoryPropertyFlags::HOST_VISIBLE,
+        )?;
+
+        Ok(Self {
+            image,
+            image_view,
+            buffer_readback,
+        })
+    }
+
+    pub fn dimensions(&self) -> Extent2D {
+        Extent2D {
+            width: self.image.create_info.extent.width,
+            height: self.image.create_info.extent.height,
+        }
+    }
+
+    pub fn rect2d(&self) -> Rect2D {
+        Rect2D::builder().extent(self.dimensions()).build()
+    }
+
+    pub fn viewport(&self) -> Viewport {
+        let dimensions = self.dimensions();
+
+        Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: dimensions.width as f32,
+            height: dimensions.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }
+    }
+
+    pub fn create_framebuffer(
+        &self,
+        device: &Arc<UsamiDevice>,
+        name: String,
+        render_pass: &UsamiRenderPass,
+    ) -> VkResult<UsamiFramebuffer> {
+        let dimensions = self.dimensions();
+
+        UsamiDevice::create_framebuffer(
+            device,
+            name,
+            FramebufferCreateInfo::builder()
+                .render_pass(render_pass.handle)
+                .attachments(&[self.image_view.handle])
+                .width(dimensions.width)
+                .height(dimensions.height)
+                .layers(1)
+                .build(),
+        )
     }
 }

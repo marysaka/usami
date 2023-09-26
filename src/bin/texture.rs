@@ -8,23 +8,22 @@ use ash::{
         ClearValue, ColorComponentFlags, CommandBufferLevel, CommandPoolCreateFlags,
         CommandPoolCreateInfo, CompareOp, ComponentMapping, ComponentSwizzle, DescriptorImageInfo,
         DescriptorPoolCreateInfo, DescriptorSetLayoutCreateInfo, DescriptorType, DynamicState,
-        Extent2D, FenceCreateFlags, Filter, Format, FramebufferCreateInfo, FrontFace,
-        GraphicsPipelineCreateInfo, ImageAspectFlags, ImageLayout, ImageSubresourceRange,
-        ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType, LogicOp,
-        PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        FenceCreateFlags, Filter, Format, FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags,
+        ImageLayout, ImageSubresourceRange, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
+        IndexType, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
         PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
         PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
         PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags, Rect2D,
+        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags,
         RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, SamplerAddressMode,
         SamplerCreateInfo, SamplerMipmapMode, ShaderStageFlags, SharingMode, StencilOp,
         StencilOpState, SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
-        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
+        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate,
         WriteDescriptorSet,
     },
 };
-use usami::{offset_of, UsamiDevice, UsamiInstance};
+use usami::{offset_of, UsamiDevice, UsamiInstance, UsamiPresentation};
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
@@ -43,8 +42,6 @@ fn main() -> VkResult<()> {
     let device = UsamiDevice::new_by_filter(
         instance,
         &[],
-        width,
-        height,
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -60,6 +57,7 @@ fn main() -> VkResult<()> {
                 .map(|x| (physical_device, x))
         }),
     )?;
+    let presentation = UsamiPresentation::new(&device, width, height)?;
 
     let command_pool = UsamiDevice::create_command_pool(
         &device,
@@ -261,21 +259,8 @@ fn main() -> VkResult<()> {
         .topology(PrimitiveTopology::TRIANGLE_LIST)
         .build();
 
-    let scissors = [Rect2D::builder()
-        .extent(Extent2D {
-            width: device.width,
-            height: device.height,
-        })
-        .build()];
-
-    let viewports = [Viewport {
-        x: 0.0,
-        y: 0.0,
-        width: device.width as f32,
-        height: device.height as f32,
-        min_depth: 0.0,
-        max_depth: 1.0,
-    }];
+    let scissors = [presentation.rect2d()];
+    let viewports = [presentation.viewport()];
 
     let viewport_state_create_info = PipelineViewportStateCreateInfo::builder()
         .scissors(&scissors)
@@ -329,8 +314,8 @@ fn main() -> VkResult<()> {
         .build();
 
     let renderpass_attachments = [AttachmentDescription::builder()
-        .format(device.presentation_image().create_info.format)
-        .samples(device.presentation_image().create_info.samples)
+        .format(presentation.image.create_info.format)
+        .samples(presentation.image.create_info.samples)
         .load_op(AttachmentLoadOp::CLEAR)
         .store_op(AttachmentStoreOp::STORE)
         .final_layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
@@ -384,17 +369,8 @@ fn main() -> VkResult<()> {
 
     let graphic_pipeline = &pipelines[0];
 
-    let framebuffer = UsamiDevice::create_framebuffer(
-        &device,
-        "framebuffer".into(),
-        FramebufferCreateInfo::builder()
-            .render_pass(render_pass.handle)
-            .attachments(&[device.presentation_image_view().handle])
-            .width(device.width)
-            .height(device.height)
-            .layers(1)
-            .build(),
-    )?;
+    let framebuffer =
+        presentation.create_framebuffer(&device, "framebuffer".into(), &render_pass)?;
 
     let command_buffers = command_pool.allocate_command_buffers(
         "command_buffer".into(),
@@ -404,8 +380,8 @@ fn main() -> VkResult<()> {
 
     usami::utils::record_command_buffer_with_image_dep(
         &command_buffers[0],
-        device.presentation_image(),
-        device.presentation_buffer_readback(),
+        &presentation.image,
+        &presentation.buffer_readback,
         |device, command_buffer, _image| {
             let vk_device = &device.handle;
             let clear_values = [ClearValue {
@@ -417,14 +393,7 @@ fn main() -> VkResult<()> {
             let render_pass_begin_info = RenderPassBeginInfo::builder()
                 .render_pass(render_pass.handle)
                 .framebuffer(framebuffer.handle)
-                .render_area(
-                    Rect2D::builder()
-                        .extent(Extent2D {
-                            width: device.width,
-                            height: device.height,
-                        })
-                        .build(),
-                )
+                .render_area(presentation.rect2d())
                 .clear_values(&clear_values);
 
             unsafe {
@@ -491,7 +460,7 @@ fn main() -> VkResult<()> {
         device.handle.destroy_sampler(sampler, None);
     }
 
-    let res: Vec<u8> = device.read_image_memory()?;
+    let res = presentation.buffer_readback.device_memory.read_to_vec()?;
 
     image::save_buffer_with_format(
         "output.bmp",
