@@ -1,10 +1,8 @@
-use argh::FromArgs;
 use ash::{
     extensions::ext::ShaderObject,
     prelude::VkResult,
     vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
 };
-use axum::{body::StreamBody, extract::Multipart};
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use hyper::{body::Bytes, header};
 use serde_json::json;
@@ -12,9 +10,9 @@ use spirv_reflect::{types::ReflectDescriptorType, ShaderModule};
 use std::{
     ffi::CString,
     fs::File,
-    io::{BufReader, Cursor, Read},
+    io::{BufReader, Read},
     net::SocketAddr,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 use tower_http::limit::RequestBodyLimitLayer;
@@ -24,27 +22,10 @@ use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
     response::{Html, IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Serialize;
-
-fn read_spirv_file(file_path: &Path) -> Vec<u32> {
-    let f = File::open(file_path).expect("Failed to open file");
-    let mut reader = BufReader::new(f);
-    let mut buffer = Vec::new();
-    reader
-        .read_to_end(&mut buffer)
-        .expect("Failed to read file");
-
-    let mut spirv = Vec::new();
-    assert!(buffer.len() % 4 == 0);
-    for i in 0..(buffer.len() / 4) {
-        let bytes = buffer[(i * 4)..(i * 4 + 4)].try_into().unwrap();
-        spirv.push(u32::from_ne_bytes(bytes));
-    }
-    spirv
-}
 
 fn create_instance() -> VkResult<UsamiInstance> {
     UsamiInstance::new(
