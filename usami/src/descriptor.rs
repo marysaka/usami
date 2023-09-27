@@ -37,6 +37,7 @@ impl UsamiDescriptorSetLayout {
 impl Drop for UsamiDescriptorSetLayout {
     fn drop(&mut self) {
         unsafe {
+            println!("DROP SETLAYOUT??!");
             self.device
                 .handle
                 .destroy_descriptor_set_layout(self.handle, None)

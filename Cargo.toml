@@ -7,12 +7,17 @@ repository = "https://github.com/marysaka/usami"
 rust-version = "1.70"
 
 [workspace]
-members = ["usami/", "usami-binaries/"]
+members = ["usami/", "usami-binaries/", "shader-dump/"]
 resolver = "2"
 
 [workspace.dependencies]
 usami = { version = "0.1.0", path = "./usami" }
 usami-binaries = { version = "0.1.0", path = "./usami-binaries" }
+shader-dump = { version = "0.1.0", path = "./shader-dump" }
+
+argh = "0.1.12"
 ash = { version = "0.37.3", features = ["linked", "debug"] }
 colorgrad = "0.6.2"
 image = "0.24.6"
+spirv-reflect = "0.2.3"
+
