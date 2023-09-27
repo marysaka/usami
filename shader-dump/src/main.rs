@@ -1,43 +1,33 @@
-use std::{
-    ffi::CString,
-    fs::File,
-    io::{BufReader, Read},
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
 use argh::FromArgs;
 use ash::{
     extensions::ext::ShaderObject,
     prelude::VkResult,
-    vk::{self, DescriptorSet, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
+    vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
 };
+use axum::{body::StreamBody, extract::Multipart};
+use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
+use hyper::{body::Bytes, header};
+use serde_json::json;
 use spirv_reflect::{types::ReflectDescriptorType, ShaderModule};
+use std::{
+    ffi::CString,
+    fs::File,
+    io::{BufReader, Cursor, Read},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use tower_http::limit::RequestBodyLimitLayer;
 use usami::{descriptor::UsamiDescriptorSetLayout, UsamiDevice, UsamiInstance};
 
-#[derive(FromArgs, Debug)]
-/// Reach new heights.
-struct Args {
-    /// spir-v file path.
-    #[argh(positional)]
-    spirv_path: PathBuf,
-
-    /// output directory path.s
-    #[argh(positional)]
-    output_directory_path: PathBuf,
-
-    /// id of the vendor to use.
-    #[argh(option)]
-    vendor_id: Option<usize>,
-
-    /// specific entrypoint to dump.
-    #[argh(option)]
-    entry_point: Option<String>,
-
-    /// enable update after bind.
-    #[argh(switch)]
-    update_after_bind: bool,
-}
+use axum::{
+    extract::DefaultBodyLimit,
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
+};
+use serde::Serialize;
 
 fn read_spirv_file(file_path: &Path) -> Vec<u32> {
     let f = File::open(file_path).expect("Failed to open file");
@@ -56,20 +46,29 @@ fn read_spirv_file(file_path: &Path) -> Vec<u32> {
     spirv
 }
 
-fn create_device(vendor_id: Option<usize>) -> VkResult<Arc<UsamiDevice>> {
-    let instance = UsamiInstance::new(
+fn create_instance() -> VkResult<UsamiInstance> {
+    UsamiInstance::new(
         "shader_dumper",
         "usami",
         vk::API_VERSION_1_2,
         &["VK_EXT_debug_utils".into()],
         false,
-    )?;
+    )
+}
+
+fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult<Arc<UsamiDevice>> {
     UsamiDevice::new_by_filter(
-        instance,
+        create_instance()?,
         &[ShaderObject::name().to_string_lossy().into()],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
                 if physical_device.properties.vendor_id != vendor_id as u32 {
+                    return None;
+                }
+            }
+
+            if let Some(device_id) = device_id {
+                if physical_device.properties.device_id != device_id as u32 {
                     return None;
                 }
             }
@@ -113,10 +112,9 @@ fn create_descriptor_set_layouts(
     reflection_module: &ShaderModule,
     entry_point: &str,
     stage: vk::ShaderStageFlags,
-    args: &Args,
+    update_after_bind: bool,
 ) -> Result<Vec<UsamiDescriptorSetLayout>, String> {
-    let reflection_sets = reflection_module
-        .enumerate_descriptor_sets(Some(entry_point))?;
+    let reflection_sets = reflection_module.enumerate_descriptor_sets(Some(entry_point))?;
 
     let max_set = reflection_sets.iter().map(|s| s.set).max().unwrap_or(0);
     let num_sets = usize::try_from(max_set).unwrap() + 1;
@@ -134,7 +132,7 @@ fn create_descriptor_set_layouts(
         let mut binding_flags = Vec::new();
         let mut bindings = Vec::new();
         for reflection_binding in reflection_set_binding {
-            if args.update_after_bind {
+            if update_after_bind {
                 let mut flags = vk::DescriptorBindingFlags::empty();
                 match reflection_binding.descriptor_type {
                     ReflectDescriptorType::Sampler
@@ -216,19 +214,17 @@ pub struct Shader {
 
 fn compile_shaders(
     device: &Arc<UsamiDevice>,
-    spirv: &Vec<u32>,
-    args: &Args,
+    spirv: &[u8],
+    entry_point: &str,
 ) -> Result<Vec<Shader>, String> {
-    let reflection_module = ShaderModule::load_u32_data(spirv)?;
+    let reflection_module = ShaderModule::load_u8_data(spirv)?;
     let entrypoints = reflection_module.enumerate_entry_points()?;
     let eso = ShaderObject::new(&device.instance.vk_instance, &device.handle);
 
     let mut shaders = Vec::new();
     for e in entrypoints {
-        if let Some(arg_ename) = &args.entry_point {
-            if &e.name != arg_ename {
-                continue;
-            }
+        if e.name != entry_point {
+            continue;
         }
 
         let stage = vk::ShaderStageFlags::from_raw(e.shader_stage.bits());
@@ -237,7 +233,7 @@ fn compile_shaders(
 
         {
             let set_layouts =
-                create_descriptor_set_layouts(&device, &reflection_module, &e.name, stage, args)
+                create_descriptor_set_layouts(&device, &reflection_module, &e.name, stage, true)
                     .map_err(|x| format!("Vulkan error: {x}"))?;
             let set_layouts_handle = set_layouts
                 .as_slice()
@@ -278,11 +274,15 @@ fn compile_shaders(
                 stages.push("vert");
             }
 
-            if stage & ShaderStageFlags::TESSELLATION_CONTROL == ShaderStageFlags::TESSELLATION_CONTROL {
+            if stage & ShaderStageFlags::TESSELLATION_CONTROL
+                == ShaderStageFlags::TESSELLATION_CONTROL
+            {
                 stages.push("tesc");
             }
 
-            if stage & ShaderStageFlags::TESSELLATION_EVALUATION == ShaderStageFlags::TESSELLATION_EVALUATION {
+            if stage & ShaderStageFlags::TESSELLATION_EVALUATION
+                == ShaderStageFlags::TESSELLATION_EVALUATION
+            {
                 stages.push("tese");
             }
 
@@ -311,11 +311,190 @@ fn compile_shaders(
     Ok(shaders)
 }
 
-fn main() {
-    let args: Args = argh::from_env();
-    println!("{:?}", args);
+#[tokio::main]
+async fn main() {
+    // initialize tracing
+    tracing_subscriber::fmt::init();
 
-    let spirv_data = read_spirv_file(&args.spirv_path);
-    let device: Arc<UsamiDevice> = create_device(args.vendor_id).unwrap();
-    let shaders = compile_shaders(&device, &spirv_data, &args).unwrap();
+    // build our application with a route
+    let app = Router::new()
+        .route("/devices", get(list_devices))
+        .route(
+            "/get_shader_binary",
+            get(show_get_shader_binary_form).post(get_shader_binary_form),
+        )
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(
+            250 * 1024 * 1024, /* 250MiB */
+        ))
+        .layer(tower_http::trace::TraceLayer::new_for_http());
+
+    // run our app with hyper
+    let addr = SocketAddr::from(([0, 0, 0, 0], 9999));
+    tracing::debug!("listening on {}", addr);
+
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+
+// the output to our `create_user` handler
+#[derive(Serialize)]
+struct PhysicalDeviceInformation {
+    pub device_name: String,
+    pub driver_version: u32,
+    pub vendor_id: u32,
+    pub device_id: u32,
+}
+
+enum ServerError {
+    VkError(vk::Result),
+    ErrorMessage(String),
+}
+
+impl IntoResponse for ServerError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            ServerError::VkError(error) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("Vulkan error: {error}"),
+            ),
+            ServerError::ErrorMessage(error) => (StatusCode::SERVICE_UNAVAILABLE, error),
+        };
+
+        let body = Json(json!({
+            "error": error_message,
+        }));
+
+        (status, body).into_response()
+    }
+}
+
+async fn list_devices() -> Result<Json<Vec<PhysicalDeviceInformation>>, ServerError> {
+    let instance = match create_instance() {
+        Ok(instance) => instance,
+        Err(error) => {
+            return Err(ServerError::ErrorMessage(format!(
+                "Cannot create instance: {error}"
+            )))
+        }
+    };
+
+    let physical_devices = match unsafe { instance.vk_instance.enumerate_physical_devices() } {
+        Ok(physical_devices) => physical_devices,
+        Err(error) => {
+            return Err(ServerError::ErrorMessage(format!(
+                "enumerate_physical_devices failed: {error}"
+            )))
+        }
+    };
+
+    let result = physical_devices
+        .iter()
+        .map(|x| {
+            let prop: vk::PhysicalDeviceProperties =
+                unsafe { instance.vk_instance.get_physical_device_properties(*x) };
+            let device_name = prop.device_name;
+            let device_name_size = device_name
+                .iter()
+                .enumerate()
+                .find(|(_, x)| **x == 0)
+                .map(|(i, _)| i)
+                .unwrap_or(device_name.len());
+
+            PhysicalDeviceInformation {
+                device_name: unsafe {
+                    CString::new(std::slice::from_raw_parts(
+                        prop.device_name.as_ptr() as *const _,
+                        device_name_size,
+                    ))
+                }
+                .unwrap()
+                .to_string_lossy()
+                .into(),
+                driver_version: prop.driver_version,
+                device_id: prop.device_id,
+                vendor_id: prop.vendor_id,
+            }
+        })
+        .collect::<Vec<PhysicalDeviceInformation>>();
+
+    Ok(Json(result))
+}
+
+#[derive(TryFromMultipart)]
+struct ShaderBinaryRequestData {
+    pub vendor_id: usize,
+    pub device_id: usize,
+    pub entry_point: String,
+    pub file: FieldData<Bytes>,
+}
+
+async fn show_get_shader_binary_form() -> Html<&'static str> {
+    Html(
+        r#"
+        <!doctype html>
+        <html>
+            <head></head>
+            <body>
+                <form action="/get_shader_binary" method="post" enctype="multipart/form-data">
+                    <label>
+                        Vendor ID:
+                        <input type="text" name="vendor_id" value="4098" required />
+                    </label>
+
+                    <label>
+                        Device ID:
+                        <input type="text" name="device_id" value="5761" required />
+                    </label>
+
+                    <label>
+                        Entrypoint:
+                        <input type="text" name="entry_point" value="main" required />
+                    </label>
+
+                    <label>
+                        Upload SPIR-V file:
+                        <input type="file" name="file" required />
+                    </label>
+
+                    <input type="submit" value="Upload file">
+                </form>
+            </body>
+        </html>
+        "#,
+    )
+}
+
+async fn get_shader_binary_form(
+    TypedMultipart(ShaderBinaryRequestData {
+        vendor_id,
+        device_id,
+        entry_point,
+        file,
+    }): TypedMultipart<ShaderBinaryRequestData>,
+) -> Result<Response, Response> {
+    let file_name = file.metadata.file_name.unwrap_or(String::from("data.spv"));
+    let file_data = file.contents.to_vec();
+    let output_file_name = file_name.replace(".spv", ".bin");
+    let device = create_device(Some(vendor_id), Some(device_id)).map_err(|error| {
+        ServerError::ErrorMessage(format!("create_device failed: {error}")).into_response()
+    })?;
+    let mut shaders =
+        compile_shaders(&device, &file_data, entry_point.as_str()).map_err(|error| {
+            ServerError::ErrorMessage(format!("compile_shaders failed: {error}")).into_response()
+        })?;
+    assert!(shaders.len() == 1);
+    let shader_data = shaders.remove(0).data;
+
+    let headers = [
+        (header::CONTENT_TYPE, "text/toml; charset=utf-8".into()),
+        (
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{output_file_name}\""),
+        ),
+    ];
+
+    Ok((headers, shader_data).into_response())
 }
