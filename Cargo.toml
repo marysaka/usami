@@ -1,10 +1,18 @@
-[package]
-name = "usami"
+[workspace.package]
 version = "0.1.0"
 authors = ["Mary <mary@mary.zone>"]
+license = "MIT OR Apache-2.0"
 edition = "2021"
+repository = "https://github.com/marysaka/usami"
+rust-version = "1.70"
 
-[dependencies]
+[workspace]
+members = ["usami/", "usami-binaries/"]
+resolver = "2"
+
+[workspace.dependencies]
+usami = { version = "0.1.0", path = "./usami" }
+usami-binaries = { version = "0.1.0", path = "./usami-binaries" }
 ash = { version = "0.37.3", features = ["linked", "debug"] }
 colorgrad = "0.6.2"
 image = "0.24.6"

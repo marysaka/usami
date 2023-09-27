@@ -9,6 +9,5 @@ layout(location = 1) out vec3 frag_pos;
 void main(void)
 {
     o_color = color;
-    gl_Position = pos;
     frag_pos = gl_Position.xyz;
 }

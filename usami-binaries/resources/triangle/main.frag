@@ -13,5 +13,12 @@ void main(void)
     vec3 normal = normalize(cross(dX,dY));
 
     float light = max(0.0, dot(lightDir, normal));
-    uFragColor = light * o_color;
+
+    vec4 result = vec4(0.0);
+
+    for (int i = 0; i < int(dX.x); i++) {
+        result += light * o_color * i;
+    }
+
+    uFragColor = result;
 }
