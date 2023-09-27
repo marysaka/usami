@@ -9,7 +9,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-argh.workspace = true
 ash.workspace = true
 axum.workspace = true
 axum_typed_multipart.workspace = true

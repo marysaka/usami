@@ -7,14 +7,7 @@ use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use hyper::{body::Bytes, header};
 use serde_json::json;
 use spirv_reflect::{types::ReflectDescriptorType, ShaderModule};
-use std::{
-    ffi::CString,
-    fs::File,
-    io::{BufReader, Read},
-    net::SocketAddr,
-    path::Path,
-    sync::Arc,
-};
+use std::{ffi::CString, net::SocketAddr, sync::Arc};
 use tower_http::limit::RequestBodyLimitLayer;
 use usami::{descriptor::UsamiDescriptorSetLayout, UsamiDevice, UsamiInstance};
 
@@ -328,17 +321,12 @@ struct PhysicalDeviceInformation {
 }
 
 enum ServerError {
-    VkError(vk::Result),
     ErrorMessage(String),
 }
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            ServerError::VkError(error) => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!("Vulkan error: {error}"),
-            ),
             ServerError::ErrorMessage(error) => (StatusCode::SERVICE_UNAVAILABLE, error),
         };
 
