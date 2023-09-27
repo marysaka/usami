@@ -245,9 +245,7 @@ fn compile_shaders(
                 .stage(stage)
                 .next_stage(next_stages(stage))
                 .code_type(ShaderCodeTypeEXT::SPIRV)
-                .code(unsafe {
-                    std::slice::from_raw_parts(spirv.as_ptr() as *const _, spirv.len() * 4)
-                })
+                .code(spirv)
                 .name(c_name.as_c_str())
                 .set_layouts(&set_layouts_handle)
                 .build();
@@ -441,12 +439,12 @@ async fn show_get_shader_binary_form() -> Html<&'static str> {
                 <form action="/get_shader_binary" method="post" enctype="multipart/form-data">
                     <label>
                         Vendor ID:
-                        <input type="text" name="vendor_id" value="4098" required />
+                        <input type="text" name="vendor_id" value="4318" required />
                     </label>
 
                     <label>
                         Device ID:
-                        <input type="text" name="device_id" value="5761" required />
+                        <input type="text" name="device_id" value="7956" required />
                     </label>
 
                     <label>
@@ -489,7 +487,7 @@ async fn get_shader_binary_form(
     let shader_data = shaders.remove(0).data;
 
     let headers = [
-        (header::CONTENT_TYPE, "text/toml; charset=utf-8".into()),
+        (header::CONTENT_TYPE, "application/octet-stream".into()),
         (
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{output_file_name}\""),
