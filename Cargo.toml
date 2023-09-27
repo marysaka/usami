@@ -16,7 +16,8 @@ usami-binaries = { version = "0.1.0", path = "./usami-binaries" }
 shader-dump = { version = "0.1.0", path = "./shader-dump" }
 
 argh = "0.1.12"
-ash = { version = "0.37.3", features = ["linked", "debug"] }
+ash = { version = "0.37.3", features = ["debug"] }
+axum = "0.6.20"
 colorgrad = "0.6.2"
 image = "0.24.6"
 spirv-reflect = "0.2.3"

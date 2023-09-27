@@ -10,7 +10,7 @@ use argh::FromArgs;
 use ash::{
     extensions::ext::ShaderObject,
     prelude::VkResult,
-    vk::{self, DescriptorSet, DescriptorSetLayout, ShaderCodeTypeEXT},
+    vk::{self, DescriptorSet, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
 };
 use spirv_reflect::{types::ReflectDescriptorType, ShaderModule};
 use usami::{descriptor::UsamiDescriptorSetLayout, UsamiDevice, UsamiInstance};
@@ -62,7 +62,7 @@ fn create_device(vendor_id: Option<usize>) -> VkResult<Arc<UsamiDevice>> {
         "usami",
         vk::API_VERSION_1_2,
         &["VK_EXT_debug_utils".into()],
-        true,
+        false,
     )?;
     UsamiDevice::new_by_filter(
         instance,
@@ -116,8 +116,7 @@ fn create_descriptor_set_layouts(
     args: &Args,
 ) -> Result<Vec<UsamiDescriptorSetLayout>, String> {
     let reflection_sets = reflection_module
-        .enumerate_descriptor_sets(Some(entry_point))
-        .expect("Failed to enumerate descriptor sets");
+        .enumerate_descriptor_sets(Some(entry_point))?;
 
     let max_set = reflection_sets.iter().map(|s| s.set).max().unwrap_or(0);
     let num_sets = usize::try_from(max_set).unwrap() + 1;
@@ -211,6 +210,7 @@ fn create_descriptor_set_layouts(
 
 pub struct Shader {
     pub name: String,
+    pub stage: String,
     pub data: Vec<u8>,
 }
 
@@ -259,7 +259,7 @@ fn compile_shaders(
             let bin = unsafe {
                 let shader_object = eso
                     .create_shaders(&[shader_info], None)
-                    .expect("Failed to compile shaders")[0];
+                    .map_err(|x| format!("Vulkan error: {x}"))?[0];
 
                 let bin: Vec<u8> = eso
                     .get_shader_binary_data(shader_object)
@@ -272,8 +272,37 @@ fn compile_shaders(
 
             std::mem::drop(set_layouts);
 
+            let mut stages = Vec::new();
+
+            if stage & ShaderStageFlags::VERTEX == ShaderStageFlags::VERTEX {
+                stages.push("vert");
+            }
+
+            if stage & ShaderStageFlags::TESSELLATION_CONTROL == ShaderStageFlags::TESSELLATION_CONTROL {
+                stages.push("tesc");
+            }
+
+            if stage & ShaderStageFlags::TESSELLATION_EVALUATION == ShaderStageFlags::TESSELLATION_EVALUATION {
+                stages.push("tese");
+            }
+
+            if stage & ShaderStageFlags::GEOMETRY == ShaderStageFlags::GEOMETRY {
+                stages.push("geom");
+            }
+
+            if stage & ShaderStageFlags::FRAGMENT == ShaderStageFlags::FRAGMENT {
+                stages.push("frag");
+            }
+
+            if stage & ShaderStageFlags::COMPUTE == ShaderStageFlags::COMPUTE {
+                stages.push("comp");
+            }
+
+            let stage = stages.join(".");
+
             shaders.push(Shader {
                 name: e.name.clone(),
+                stage,
                 data: bin,
             });
         }
@@ -287,6 +316,6 @@ fn main() {
     println!("{:?}", args);
 
     let spirv_data = read_spirv_file(&args.spirv_path);
-    let device = create_device(args.vendor_id).unwrap();
+    let device: Arc<UsamiDevice> = create_device(args.vendor_id).unwrap();
     let shaders = compile_shaders(&device, &spirv_data, &args).unwrap();
 }
