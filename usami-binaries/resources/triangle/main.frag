@@ -14,11 +14,5 @@ void main(void)
 
     float light = max(0.0, dot(lightDir, normal));
 
-    vec4 result = vec4(0.0);
-
-    for (int i = 0; i < int(dX.x); i++) {
-        result += light * o_color * i;
-    }
-
-    uFragColor = result;
+    uFragColor = light * o_color;
 }
