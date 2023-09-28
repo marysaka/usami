@@ -66,7 +66,11 @@ async fn get_shader_binary(args: &Args) -> Vec<u8> {
 
     let mut result = Vec::new();
 
-    assert!(response.status() == 200);
+    if response.status() != 200 {
+        let error_txt = response.text_with_charset("utf-8").await.unwrap();
+
+        panic!("Server replied with error: {error_txt}")
+    }
 
     let mut content = Cursor::new(response.bytes().await.unwrap());
     std::io::copy(&mut content, &mut result).unwrap();
@@ -147,5 +151,7 @@ async fn main() {
             let mut file = File::create(output_directory.join("shader_data.bin")).unwrap();
             file.write_all(&shader_binary_data).unwrap();
         }
+    } else {
+        eprintln!("ZSTD header not found!");
     }
 }
