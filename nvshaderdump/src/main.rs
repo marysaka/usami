@@ -99,23 +99,87 @@ pub fn get_zstd_shader_blob(bin: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-pub fn get_shader_data(dec: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let sz = u32::from_ne_bytes(dec[112..116].try_into().unwrap());
-    let hdr_start = usize::try_from(sz).unwrap() + 56; /* Why? */
-    let hdr_end = hdr_start + 128;
+const FERMI_HDR_SIZE: usize = 96;
+const TURING_HDR_SIZE: usize = 128;
 
-    let bin_start = hdr_end;
-    let mut bin_end = hdr_end;
-    while bin_end < dec.len() {
-        if dec[bin_end..(bin_end + 16)] == [0; 16] {
-            break;
+pub struct ShaderBlobInfo {
+    pub offset: usize,
+    pub size: usize,
+}
+
+pub fn find_shader_data_offsets(dec: &[u8]) -> Option<(ShaderBlobInfo, ShaderBlobInfo)> {
+    let section_2d = 0x2d_u32.to_ne_bytes();
+    for i in (0..dec.len()).step_by(4) {
+        if dec[i..(i + 4)] == section_2d {
+            let header_base_index = i + 4;
+            let header_size = u32::from_ne_bytes(
+                dec[header_base_index..header_base_index + 4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let header_offset = u32::from_ne_bytes(
+                dec[header_base_index + 4..header_base_index + 8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let shader_base_index = i + 0x24;
+            let shader_size = u32::from_ne_bytes(
+                dec[shader_base_index..shader_base_index + 4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let shader_offset = u32::from_ne_bytes(
+                dec[shader_base_index + 4..shader_base_index + 8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            println!("{:?}", &dec[i..i + 0x10]);
+            println!("Header {header_offset:x} with {header_size:x} bytes");
+            println!("Shader {shader_offset:x} with {shader_size:x} bytes");
+
+            return Some((
+                ShaderBlobInfo {
+                    offset: header_offset as usize + 8,
+                    size: header_size as usize,
+                },
+                ShaderBlobInfo {
+                    offset: shader_offset as usize + 8,
+                    size: shader_size as usize,
+                },
+            ));
         }
-        bin_end += 16;
     }
 
+    None
+}
+
+pub fn get_shader_data(dec: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let (header_info, shader_info) =
+        find_shader_data_offsets(dec).expect("Cannot find shader data offsets!");
+
+    // Get actual header size by detecting SPH version.
+    let sph_version = (u16::from_ne_bytes(
+        dec[header_info.offset..header_info.offset + 2]
+            .try_into()
+            .unwrap(),
+    ) >> 5)
+        & 0x1f;
+
+    let hdr_expected_size = if sph_version < 4 {
+        FERMI_HDR_SIZE
+    } else {
+        TURING_HDR_SIZE
+    };
+
+    // Sanity check that the values are in ranges.
+    assert!(header_info.size == hdr_expected_size);
+    assert!(header_info.offset + hdr_expected_size == shader_info.offset);
+
     (
-        dec[hdr_start..hdr_end].into(),
-        dec[bin_start..bin_end].into(),
+        dec[header_info.offset..header_info.offset + header_info.size].into(),
+        dec[shader_info.offset..shader_info.offset + shader_info.size].into(),
     )
 }
 
