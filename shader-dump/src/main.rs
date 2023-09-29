@@ -1,5 +1,5 @@
 use ash::{
-    extensions::ext::ShaderObject,
+    extensions::ext::{MeshShader, ShaderObject},
     prelude::VkResult,
     vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
 };
@@ -33,7 +33,10 @@ fn create_instance() -> VkResult<UsamiInstance> {
 fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult<Arc<UsamiDevice>> {
     UsamiDevice::new_by_filter(
         create_instance()?,
-        &[ShaderObject::name().to_string_lossy().into()],
+        &[
+            ShaderObject::name().to_string_lossy().into(),
+            MeshShader::name().to_string_lossy().into(),
+        ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
                 if physical_device.properties.vendor_id != vendor_id as u32 {
@@ -76,6 +79,10 @@ fn next_stages(stage: vk::ShaderStageFlags) -> vk::ShaderStageFlags {
         vk::ShaderStageFlags::FRAGMENT
     } else if stage == vk::ShaderStageFlags::FRAGMENT {
         vk::ShaderStageFlags::empty()
+    } else if stage == vk::ShaderStageFlags::TASK_EXT {
+        vk::ShaderStageFlags::MESH_EXT
+    } else if stage == vk::ShaderStageFlags::MESH_EXT {
+        vk::ShaderStageFlags::FRAGMENT
     } else {
         panic!("Unsupported shader stage");
     }
@@ -144,7 +151,7 @@ fn create_descriptor_set_layouts(
                     vk::DescriptorType::STORAGE_BUFFER_DYNAMIC
                 }
                 ReflectDescriptorType::InputAttachment => vk::DescriptorType::INPUT_ATTACHMENT,
-                ReflectDescriptorType::AccelerationStructureNV => {
+                ReflectDescriptorType::AccelerationStructureKHR => {
                     vk::DescriptorType::ACCELERATION_STRUCTURE_KHR
                 }
             };

@@ -4,7 +4,7 @@ use std::{
 };
 
 use ash::{
-    extensions::ext::ShaderObject,
+    extensions::ext::{MeshShader, ShaderObject},
     prelude::*,
     vk::{
         BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
@@ -12,9 +12,9 @@ use ash::{
         Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
         ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
         MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
-        PhysicalDeviceMemoryProperties, PhysicalDeviceProperties,
-        PhysicalDeviceShaderObjectFeaturesEXT, QueueFamilyProperties, Rect2D, SampleCountFlags,
-        SharingMode, Viewport,
+        PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
+        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT, QueueFamilyProperties,
+        Rect2D, SampleCountFlags, SharingMode, Viewport,
     },
 };
 
@@ -77,10 +77,15 @@ impl UsamiDevice {
             .collect();
 
         let mut has_shader_object_extension = false;
+        let mut has_mesh_shader_extension = false;
 
         for extension in &extensions_cstring {
             if ShaderObject::name() == extension.as_c_str() {
                 has_shader_object_extension = true;
+            }
+
+            if MeshShader::name() == extension.as_c_str() {
+                has_mesh_shader_extension = true;
             }
         }
 
@@ -100,6 +105,10 @@ impl UsamiDevice {
             .shader_object(true)
             .build();
 
+        let mut mesh_shader_features = PhysicalDeviceMeshShaderFeaturesEXT::builder()
+            .mesh_shader(true)
+            .build();
+
         let mut create_info_builder = DeviceCreateInfo::builder()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
@@ -107,6 +116,10 @@ impl UsamiDevice {
 
         if has_shader_object_extension {
             create_info_builder = create_info_builder.push_next(&mut shader_object_features);
+        }
+
+        if has_mesh_shader_extension {
+            create_info_builder = create_info_builder.push_next(&mut mesh_shader_features);
         }
 
         let create_info = create_info_builder.build();
