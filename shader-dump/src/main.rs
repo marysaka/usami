@@ -77,7 +77,7 @@ fn next_stages(stage: vk::ShaderStageFlags) -> vk::ShaderStageFlags {
         vk::ShaderStageFlags::GEOMETRY | vk::ShaderStageFlags::FRAGMENT
     } else if stage == vk::ShaderStageFlags::GEOMETRY {
         vk::ShaderStageFlags::FRAGMENT
-    } else if stage == vk::ShaderStageFlags::FRAGMENT {
+    } else if stage == vk::ShaderStageFlags::FRAGMENT || stage == vk::ShaderStageFlags::COMPUTE {
         vk::ShaderStageFlags::empty()
     } else if stage == vk::ShaderStageFlags::TASK_EXT {
         vk::ShaderStageFlags::MESH_EXT
