@@ -5,6 +5,7 @@ use std::{
 };
 
 use argh::FromArgs;
+use hyper::header;
 use reqwest::multipart::Part;
 
 #[derive(FromArgs)]
@@ -102,84 +103,95 @@ pub fn get_zstd_shader_blob(bin: &[u8]) -> Option<Vec<u8>> {
 const FERMI_HDR_SIZE: usize = 96;
 const TURING_HDR_SIZE: usize = 128;
 
+#[derive(Debug)]
 pub struct ShaderBlobInfo {
     pub offset: usize,
     pub size: usize,
 }
 
-pub fn find_shader_data_offsets(dec: &[u8]) -> Option<(ShaderBlobInfo, ShaderBlobInfo)> {
-    let section_2d = 0x2d_u32.to_ne_bytes();
-    for i in (0..dec.len()).step_by(4) {
-        if dec[i..(i + 4)] == section_2d {
-            let header_base_index = i + 4;
-            let header_size = u32::from_ne_bytes(
-                dec[header_base_index..header_base_index + 4]
-                    .try_into()
-                    .unwrap(),
-            );
-            let header_offset = u32::from_ne_bytes(
-                dec[header_base_index + 4..header_base_index + 8]
-                    .try_into()
-                    .unwrap(),
-            );
+pub fn find_shader_data_offsets(
+    nvuc_container: &[u8],
+) -> Option<(Option<ShaderBlobInfo>, ShaderBlobInfo)> {
+    let magic = u32::from_ne_bytes(nvuc_container[0..4].try_into().unwrap());
+    assert!(magic == 0x6375564e);
 
-            let shader_base_index = i + 0x24;
-            let shader_size = u32::from_ne_bytes(
-                dec[shader_base_index..shader_base_index + 4]
-                    .try_into()
-                    .unwrap(),
-            );
-            let shader_offset = u32::from_ne_bytes(
-                dec[shader_base_index + 4..shader_base_index + 8]
-                    .try_into()
-                    .unwrap(),
-            );
+    let section_count = u16::from_ne_bytes(nvuc_container[8..10].try_into().unwrap()) as usize;
 
-            println!("{:?}", &dec[i..i + 0x10]);
-            println!("Header {header_offset:x} with {header_size:x} bytes");
-            println!("Shader {shader_offset:x} with {shader_size:x} bytes");
+    let nvuc_section_header = &nvuc_container[32..];
 
-            return Some((
-                ShaderBlobInfo {
-                    offset: header_offset as usize + 8,
-                    size: header_size as usize,
-                },
-                ShaderBlobInfo {
-                    offset: shader_offset as usize + 8,
-                    size: shader_size as usize,
-                },
-            ));
+    let mut header_blob = None;
+    let mut code_blob = None;
+
+    for section_index in 0..section_count {
+        let section_header_offset = section_index * 32;
+        let section_id = u16::from_ne_bytes(
+            nvuc_section_header[section_header_offset..section_header_offset + 2]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let section_size = u32::from_ne_bytes(
+            nvuc_section_header[section_header_offset + 4..section_header_offset + 8]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let section_offset = u64::from_ne_bytes(
+            nvuc_section_header[section_header_offset + 8..section_header_offset + 16]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+
+        if section_id == 0x2d {
+            header_blob = Some(ShaderBlobInfo {
+                offset: section_offset,
+                size: section_size,
+            })
+        } else if section_id == 0x1 {
+            code_blob = Some(ShaderBlobInfo {
+                offset: section_offset,
+                size: section_size,
+            })
         }
+    }
+
+    if let Some(code_blob) = code_blob {
+        return Some((header_blob, code_blob));
     }
 
     None
 }
 
 pub fn get_shader_data(dec: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let nvuc_container = &dec[8..];
     let (header_info, shader_info) =
-        find_shader_data_offsets(dec).expect("Cannot find shader data offsets!");
+        find_shader_data_offsets(nvuc_container).expect("Cannot find shader data offsets!");
 
-    // Get actual header size by detecting SPH version.
-    let sph_version = (u16::from_ne_bytes(
-        dec[header_info.offset..header_info.offset + 2]
-            .try_into()
-            .unwrap(),
-    ) >> 5)
-        & 0x1f;
+    let header_data = if let Some(header_info) = header_info {
+        // Get actual header size by detecting SPH version.
+        let sph_version = (u16::from_ne_bytes(
+            nvuc_container[header_info.offset..header_info.offset + 2]
+                .try_into()
+                .unwrap(),
+        ) >> 5)
+            & 0x1f;
 
-    let hdr_expected_size = if sph_version < 4 {
-        FERMI_HDR_SIZE
+        let hdr_expected_size = if sph_version < 4 {
+            FERMI_HDR_SIZE
+        } else {
+            TURING_HDR_SIZE
+        };
+
+        // Sanity check that the values are in ranges.
+        assert!(header_info.size == hdr_expected_size);
+        assert!(header_info.offset + hdr_expected_size == shader_info.offset);
+
+        nvuc_container[header_info.offset..header_info.offset + header_info.size].into()
     } else {
-        TURING_HDR_SIZE
+        Vec::new()
     };
 
-    // Sanity check that the values are in ranges.
-    assert!(header_info.size == hdr_expected_size);
-    assert!(header_info.offset + hdr_expected_size == shader_info.offset);
-
     (
-        dec[header_info.offset..header_info.offset + header_info.size].into(),
-        dec[shader_info.offset..shader_info.offset + shader_info.size].into(),
+        header_data,
+        nvuc_container[shader_info.offset..shader_info.offset + shader_info.size].into(),
     )
 }
 
