@@ -3,5 +3,5 @@
 
 void main()
 {
-	EmitMeshTasksEXT(3, 1, 1);
+	EmitMeshTasksEXT(2, 3, 4);
 }
