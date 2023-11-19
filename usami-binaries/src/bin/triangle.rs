@@ -7,16 +7,16 @@ use ash::{
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
         ColorComponentFlags, CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo,
         CompareOp, DynamicState, FenceCreateFlags, Format, FrontFace, GraphicsPipelineCreateInfo,
-        ImageLayout, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-        PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-        PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-        PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, QueueFlags,
-        RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, SharingMode,
-        StencilOp, StencilOpState, SubmitInfo, SubpassContents, SubpassDependency,
-        SubpassDescription, VertexInputAttributeDescription, VertexInputBindingDescription,
-        VertexInputRate,
+        ImageLayout, LogicOp, PhysicalDeviceType, PipelineBindPoint, PipelineCache,
+        PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+        PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
+        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
+        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
+        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
+        PrimitiveTopology, QueueFlags, RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags,
+        ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo, SubpassContents,
+        SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
+        VertexInputBindingDescription, VertexInputRate,
     },
 };
 use usami::{offset_of, UsamiDevice, UsamiInstance, UsamiPresentation};
@@ -324,6 +324,7 @@ fn main() -> VkResult<()> {
                     0,
                     1,
                 );
+                //vk_device.cmd_draw(command_buffer.handle, 3, 2, 0, 0);
                 vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL

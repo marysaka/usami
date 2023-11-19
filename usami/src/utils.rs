@@ -12,7 +12,7 @@ use image::{EncodableLayout, ImageBuffer, RgbaImage};
 
 use crate::{
     image::{RawImageData, RawImageLevelInfo},
-    NextMultipleOf, UsamiBuffer, UsamiCommandBuffer, UsamiCommandPool, UsamiDevice, UsamiImage,
+    UsamiBuffer, UsamiCommandBuffer, UsamiCommandPool, UsamiDevice, UsamiImage,
 };
 
 #[macro_export]

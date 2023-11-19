@@ -5,7 +5,6 @@ use std::{
 };
 
 use argh::FromArgs;
-use hyper::header;
 use reqwest::multipart::Part;
 
 #[derive(FromArgs)]

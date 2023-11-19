@@ -8,7 +8,7 @@ use ash::{
     },
 };
 
-use crate::{NextMultipleOf, UsamiDevice};
+use crate::UsamiDevice;
 
 pub struct UsamiDeviceMemory {
     device: Arc<UsamiDevice>,
