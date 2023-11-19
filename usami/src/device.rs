@@ -107,6 +107,7 @@ impl UsamiDevice {
 
         let mut mesh_shader_features = PhysicalDeviceMeshShaderFeaturesEXT::builder()
             .mesh_shader(true)
+            .task_shader(true)
             .build();
 
         let mut create_info_builder = DeviceCreateInfo::builder()

@@ -1,25 +1,23 @@
 use std::ffi::CString;
 
 use ash::{
+    extensions::ext::MeshShader,
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
-        AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
-        ColorComponentFlags, CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo,
-        CompareOp, DynamicState, FenceCreateFlags, Format, FrontFace, GraphicsPipelineCreateInfo,
-        ImageLayout, LogicOp, PhysicalDeviceType, PipelineBindPoint, PipelineCache,
-        PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
-        PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
-        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
+        AttachmentStoreOp, BlendFactor, BlendOp, ClearValue, ColorComponentFlags,
+        CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo, CompareOp, DynamicState,
+        FenceCreateFlags, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp,
+        PhysicalDeviceType, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
+        PipelineDynamicStateCreateInfo, PipelineMultisampleStateCreateInfo,
         PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
-        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
-        PrimitiveTopology, QueueFlags, RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags,
-        ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo, SubpassContents,
-        SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
-        VertexInputBindingDescription, VertexInputRate,
+        PipelineViewportStateCreateInfo, PolygonMode, QueueFlags, RenderPassBeginInfo,
+        RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, StencilOp, StencilOpState,
+        SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
     },
 };
-use usami::{offset_of, UsamiDevice, UsamiInstance, UsamiPresentation};
+use usami::{UsamiDevice, UsamiInstance, UsamiPresentation};
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
@@ -34,10 +32,16 @@ fn main() -> VkResult<()> {
     let width = 1920;
     let height = 1080;
 
-    let instance = UsamiInstance::new("triangle", "usami", vk::API_VERSION_1_1, &extensions, true)?;
+    let instance = UsamiInstance::new(
+        "triangle_mesh",
+        "usami",
+        vk::API_VERSION_1_2,
+        &extensions,
+        true,
+    )?;
     let device = UsamiDevice::new_by_filter(
         instance,
-        &[],
+        &["VK_EXT_mesh_shader".into()],
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -59,47 +63,18 @@ fn main() -> VkResult<()> {
     )?;
     let presentation = UsamiPresentation::new(&device, width, height)?;
 
-    let index_buffer_data = [0u32, 1, 2];
-    let index_buffer = UsamiDevice::create_buffer(
-        &device,
-        "index_buffer".into(),
-        BufferCreateFlags::empty(),
-        SharingMode::EXCLUSIVE,
-        BufferUsageFlags::INDEX_BUFFER,
-        &index_buffer_data,
-    )?;
+    let task_shader_code = usami::utils::as_u32_vec(include_bytes!(
+        "../../resources/triangle_mesh/main.task.spv"
+    ));
+    let mesh_shader_code = usami::utils::as_u32_vec(include_bytes!(
+        "../../resources/triangle_mesh/main.mesh.spv"
+    ));
+    let frag_shader_code = usami::utils::as_u32_vec(include_bytes!(
+        "../../resources/triangle_mesh/main.frag.spv"
+    ));
 
-    let vertices = [
-        Vertex {
-            pos: [-1.0, 1.0, 0.0, 1.0],
-            color: [0.0, 1.0, 0.0, 1.0],
-        },
-        Vertex {
-            pos: [1.0, 1.0, 0.0, 1.0],
-            color: [0.0, 0.0, 1.0, 1.0],
-        },
-        Vertex {
-            pos: [0.0, -1.0, 0.0, 1.0],
-            color: [1.0, 0.0, 0.0, 1.0],
-        },
-    ];
-
-    let vbo_buffer = UsamiDevice::create_buffer(
-        &device,
-        "vbo_buffer".into(),
-        BufferCreateFlags::empty(),
-        SharingMode::EXCLUSIVE,
-        BufferUsageFlags::VERTEX_BUFFER,
-        &vertices,
-    )?;
-
-    let vertex_shader_code =
-        usami::utils::as_u32_vec(include_bytes!("../../resources/triangle/main.vert.spv"));
-    let frag_shader_code =
-        usami::utils::as_u32_vec(include_bytes!("../../resources/triangle/main.frag.spv"));
-
-    let vertex_shader =
-        UsamiDevice::create_shader(&device, "vertex_shader".into(), &vertex_shader_code)?;
+    let task_shader = UsamiDevice::create_shader(&device, "task_shader".into(), &task_shader_code)?;
+    let mesh_shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &mesh_shader_code)?;
     let frag_shader = UsamiDevice::create_shader(&device, "frag_shader".into(), &frag_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
@@ -108,9 +83,14 @@ fn main() -> VkResult<()> {
 
     let shader_stage_create_infos = [
         PipelineShaderStageCreateInfo::builder()
-            .module(vertex_shader.handle)
+            .module(task_shader.handle)
             .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::VERTEX)
+            .stage(ShaderStageFlags::TASK_EXT)
+            .build(),
+        PipelineShaderStageCreateInfo::builder()
+            .module(mesh_shader.handle)
+            .name(shader_entrypoint_name.as_c_str())
+            .stage(ShaderStageFlags::MESH_EXT)
             .build(),
         PipelineShaderStageCreateInfo::builder()
             .module(frag_shader.handle)
@@ -118,36 +98,6 @@ fn main() -> VkResult<()> {
             .stage(ShaderStageFlags::FRAGMENT)
             .build(),
     ];
-
-    let vertex_input_binding_descriptions = [VertexInputBindingDescription::builder()
-        .binding(0)
-        .stride(std::mem::size_of::<Vertex>() as u32)
-        .input_rate(VertexInputRate::VERTEX)
-        .build()];
-
-    let vertex_input_attribute_descriptions = [
-        VertexInputAttributeDescription::builder()
-            .location(0)
-            .binding(0)
-            .offset(offset_of!(Vertex, pos) as u32)
-            .format(Format::R32G32B32A32_SFLOAT)
-            .build(),
-        VertexInputAttributeDescription::builder()
-            .location(1)
-            .binding(0)
-            .offset(offset_of!(Vertex, color) as u32)
-            .format(Format::R32G32B32A32_SFLOAT)
-            .build(),
-    ];
-
-    let vertex_input_state_create_info = PipelineVertexInputStateCreateInfo::builder()
-        .vertex_attribute_descriptions(&vertex_input_attribute_descriptions)
-        .vertex_binding_descriptions(&vertex_input_binding_descriptions)
-        .build();
-
-    let vertex_input_assembly_state_create_info = PipelineInputAssemblyStateCreateInfo::builder()
-        .topology(PrimitiveTopology::TRIANGLE_LIST)
-        .build();
 
     let scissors = [presentation.rect2d()];
     let viewports = [presentation.viewport()];
@@ -238,8 +188,6 @@ fn main() -> VkResult<()> {
 
     let graphics_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
         .stages(&shader_stage_create_infos)
-        .vertex_input_state(&vertex_input_state_create_info)
-        .input_assembly_state(&vertex_input_assembly_state_create_info)
         .viewport_state(&viewport_state_create_info)
         .rasterization_state(&rasterization_create_info)
         .multisample_state(&multisample_state_create_info)
@@ -282,6 +230,7 @@ fn main() -> VkResult<()> {
         &presentation.image,
         &presentation.buffer_readback,
         |device, command_buffer, _image| {
+            let vk_instance = &device.instance.vk_instance;
             let vk_device = &device.handle;
             let clear_values = [ClearValue {
                 color: vk::ClearColorValue {
@@ -308,27 +257,10 @@ fn main() -> VkResult<()> {
                 );
                 vk_device.cmd_set_viewport(command_buffer.handle, 0, &viewports);
                 vk_device.cmd_set_scissor(command_buffer.handle, 0, &scissors);
-                vk_device.cmd_bind_vertex_buffers(
-                    command_buffer.handle,
-                    0,
-                    &[vbo_buffer.handle],
-                    &[0],
-                );
-                vk_device.cmd_bind_index_buffer(
-                    command_buffer.handle,
-                    index_buffer.handle,
-                    0,
-                    vk::IndexType::UINT32,
-                );
-                vk_device.cmd_draw_indexed(
-                    command_buffer.handle,
-                    index_buffer_data.len() as u32,
-                    1,
-                    0,
-                    0,
-                    1,
-                );
-                //vk_device.cmd_draw(command_buffer.handle, 3, 2, 0, 0);
+
+                let mesh_shader_access = MeshShader::new(vk_instance, vk_device);
+
+                mesh_shader_access.cmd_draw_mesh_tasks(command_buffer.handle, 1, 1, 1);
                 vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL
