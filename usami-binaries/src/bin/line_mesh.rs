@@ -64,13 +64,13 @@ fn main() -> VkResult<()> {
     let presentation = UsamiPresentation::new(&device, width, height)?;
 
     let task_shader_code = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/triangle_mesh/main.task.spv"
+        "../../resources/line_mesh/main.task.spv"
     ));
     let mesh_shader_code = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/triangle_mesh/main.mesh.spv"
+        "../../resources/line_mesh/main.mesh.spv"
     ));
-    let frag_shader_code = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/triangle_mesh/main.frag.spv"
+    let frag_shader_code: Vec<u32> = usami::utils::as_u32_vec(include_bytes!(
+        "../../resources/line_mesh/main.frag.spv"
     ));
 
     let task_shader = UsamiDevice::create_shader(&device, "task_shader".into(), &task_shader_code)?;

@@ -1,0 +1,8 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+
+void main()
+{
+	// no op here but we still use it for science
+	EmitMeshTasksEXT(1, 1, 1);
+}
