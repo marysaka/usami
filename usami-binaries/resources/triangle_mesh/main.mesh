@@ -26,17 +26,15 @@ void main()
     // Define one triangle.
 	SetMeshOutputsEXT(3, 1);
 
-	vec4 offset = vec4(0.0, 0.0, gl_GlobalInvocationID.x, 0.0);
-
     // Set position of each vertice.
-	gl_MeshVerticesEXT[0].gl_Position = c_positions[0] + offset;
-	gl_MeshVerticesEXT[1].gl_Position = c_positions[1] + offset;
-	gl_MeshVerticesEXT[2].gl_Position = c_positions[2] + offset;
+	gl_MeshVerticesEXT[0].gl_Position = c_positions[0];
+	gl_MeshVerticesEXT[1].gl_Position = c_positions[1];
+	gl_MeshVerticesEXT[2].gl_Position = c_positions[2];
 
     // Set associated to each vertice.
-	o_mesh_output[0].color = c_colors[0] + offset;
-	o_mesh_output[1].color = c_colors[1] + offset;
-	o_mesh_output[2].color = c_colors[2] + offset;
+	o_mesh_output[0].color = c_colors[0];
+	o_mesh_output[1].color = c_colors[1];
+	o_mesh_output[2].color = c_colors[2];
 
     // Finally set triangle primitive indices.
 	gl_PrimitiveTriangleIndicesEXT[gl_LocalInvocationIndex] =  uvec3(0, 1, 2);
