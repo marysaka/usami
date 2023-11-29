@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, sync::Arc};
+use std::{fs::File, io::Read, sync::Arc, path::Path};
 
 use ash::{
     prelude::VkResult,
@@ -26,7 +26,7 @@ macro_rules! offset_of {
     }};
 }
 
-pub fn read_spv_file(file_path: &str) -> Vec<u32> {
+pub fn read_spv_file<P: AsRef<Path>>(file_path: P) -> Vec<u32> {
     let mut data = Vec::new();
 
     let mut file = File::open(file_path).unwrap();

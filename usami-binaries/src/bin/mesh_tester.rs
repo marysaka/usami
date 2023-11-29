@@ -19,21 +19,44 @@ use ash::{
 };
 use usami::{UsamiDevice, UsamiInstance, UsamiPresentation};
 
-#[derive(Clone, Debug, Copy)]
-#[repr(C)]
-struct Vertex {
-    pos: [f32; 4],
-    color: [f32; 4],
+use std::path::PathBuf;
+
+use argh::FromArgs;
+
+#[derive(FromArgs)]
+/// Reach new heights.
+struct Args {
+    /// the path to the task shader to use.
+    #[argh(option)]
+    task_path: Option<PathBuf>,
+
+    /// the path to the mesh shader to use.
+    #[argh(option)]
+    mesh_path: PathBuf,
+
+    /// the X size of the subgroup.
+    #[argh(option)]
+    group_count_x: Option<u32>,
+
+    /// the Y size of the subgroup.
+    #[argh(option)]
+    group_count_y: Option<u32>,
+
+    /// the Z size of the subgroup.
+    #[argh(option)]
+    group_count_z: Option<u32>,
 }
 
 fn main() -> VkResult<()> {
+    let args: Args = argh::from_env();
+
     let extensions = ["VK_EXT_debug_utils".into()];
 
-    let width = 1920;
-    let height = 1080;
+    let width = 400;
+    let height = 400;
 
     let instance = UsamiInstance::new(
-        "triangle_mesh",
+        "mesh_tester",
         "usami",
         vk::API_VERSION_1_2,
         &extensions,
@@ -63,41 +86,61 @@ fn main() -> VkResult<()> {
     )?;
     let presentation = UsamiPresentation::new(&device, width, height)?;
 
-    let task_shader_code = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/line_mesh/main.task.spv"
-    ));
-    let mesh_shader_code = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/line_mesh/main.mesh.spv"
-    ));
-    let frag_shader_code: Vec<u32> = usami::utils::as_u32_vec(include_bytes!(
-        "../../resources/line_mesh/main.frag.spv"
-    ));
-
-    let task_shader = UsamiDevice::create_shader(&device, "task_shader".into(), &task_shader_code)?;
-    let mesh_shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &mesh_shader_code)?;
-    let frag_shader = UsamiDevice::create_shader(&device, "frag_shader".into(), &frag_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
     let pipeline_layout =
         UsamiDevice::create_pipeline_layout(&device, "base_pipeline_layout".into(), &[])?;
 
-    let shader_stage_create_infos = [
-        //PipelineShaderStageCreateInfo::builder()
-        //    .module(task_shader.handle)
-        //    .name(shader_entrypoint_name.as_c_str())
-        //    .stage(ShaderStageFlags::TASK_EXT)
-        //    .build(),
-        PipelineShaderStageCreateInfo::builder()
-            .module(mesh_shader.handle)
-            .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::MESH_EXT)
-            .build(),
-        PipelineShaderStageCreateInfo::builder()
-            .module(frag_shader.handle)
-            .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::FRAGMENT)
-            .build(),
-    ];
+    let mut active_shaders = Vec::new();
+    let mut shader_stage_create_infos = Vec::new();
+
+    if let Some(task_shader_path) = &args.task_path {
+        let shader_code = usami::utils::read_spv_file(task_shader_path);
+        let shader = UsamiDevice::create_shader(&device, "task_shader".into(), &shader_code)?;
+
+        shader_stage_create_infos.push(
+            PipelineShaderStageCreateInfo::builder()
+                .module(shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::TASK_EXT)
+                .build(),
+        );
+        active_shaders.push(shader);
+    }
+
+    {
+        let shader_code = usami::utils::read_spv_file(&args.mesh_path);
+        let shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &shader_code)?;
+    
+        shader_stage_create_infos.push(
+            PipelineShaderStageCreateInfo::builder()
+                .module(shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::MESH_EXT)
+                .build(),
+        );
+        active_shaders.push(shader);
+    }
+
+    {
+        let shader_code = usami::utils::as_u32_vec(include_bytes!(
+            "../../resources/mesh_tester/main.frag.spv"
+        ));
+        let shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &shader_code)?;
+    
+        shader_stage_create_infos.push(
+            PipelineShaderStageCreateInfo::builder()
+                .module(shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::FRAGMENT)
+                .build(),
+        );
+        active_shaders.push(shader);
+    }
+
+    let group_count_x = args.group_count_x.unwrap_or(1);
+    let group_count_y = args.group_count_y.unwrap_or(1);
+    let group_count_z = args.group_count_z.unwrap_or(1);
 
     let scissors = [presentation.rect2d()];
     let viewports = [presentation.viewport()];
@@ -260,7 +303,7 @@ fn main() -> VkResult<()> {
 
                 let mesh_shader_access = MeshShader::new(vk_instance, vk_device);
 
-                mesh_shader_access.cmd_draw_mesh_tasks(command_buffer.handle, 1, 1, 1);
+                mesh_shader_access.cmd_draw_mesh_tasks(command_buffer.handle, group_count_x, group_count_y, group_count_z);
                 vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL

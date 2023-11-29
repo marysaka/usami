@@ -9,6 +9,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+argh.workspace = true
 ash.workspace = true
 usami.workspace = true
 image.workspace = true
