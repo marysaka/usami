@@ -5,16 +5,18 @@ use ash::{
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
-        AttachmentStoreOp, BlendFactor, BlendOp, ClearValue, ColorComponentFlags,
-        CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo, CompareOp, DynamicState,
-        FenceCreateFlags, FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp,
-        PhysicalDeviceType, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineMultisampleStateCreateInfo,
-        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
-        PipelineViewportStateCreateInfo, PolygonMode, QueueFlags, RenderPassBeginInfo,
-        RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, StencilOp, StencilOpState,
-        SubmitInfo, SubpassContents, SubpassDependency, SubpassDescription,
+        AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags, ClearValue,
+        ColorComponentFlags, CommandBufferLevel, CommandPoolCreateFlags, CommandPoolCreateInfo,
+        CompareOp, DescriptorBufferInfo, DescriptorPoolCreateInfo, DescriptorSetLayoutCreateInfo,
+        DynamicState, FenceCreateFlags, FrontFace, GraphicsPipelineCreateInfo, ImageLayout,
+        LogicOp, MemoryPropertyFlags, PhysicalDeviceType, PipelineBindPoint, PipelineCache,
+        PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+        PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
+        PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
+        PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineViewportStateCreateInfo,
+        PolygonMode, QueueFlags, RenderPassBeginInfo, RenderPassCreateInfo, SampleCountFlags,
+        ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo, SubpassContents,
+        SubpassDependency, SubpassDescription, WriteDescriptorSet,
     },
 };
 use usami::{UsamiDevice, UsamiInstance, UsamiPresentation};
@@ -88,8 +90,43 @@ fn main() -> VkResult<()> {
 
     let shader_entrypoint_name = CString::new("main").unwrap();
 
-    let pipeline_layout =
-        UsamiDevice::create_pipeline_layout(&device, "base_pipeline_layout".into(), &[])?;
+    let descriptor_pool_sizes = [vk::DescriptorPoolSize {
+        ty: vk::DescriptorType::UNIFORM_BUFFER,
+        descriptor_count: 1,
+    }];
+    let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
+        .pool_sizes(&descriptor_pool_sizes)
+        .max_sets(1)
+        .build();
+
+    let descriptor_pool = UsamiDevice::create_descriptor_pool(
+        &device,
+        "descriptor_pool".into(),
+        descriptor_pool_create_info,
+    )?;
+
+    let desc_layout_bindings = [vk::DescriptorSetLayoutBinding::builder()
+        .binding(0)
+        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(1)
+        .stage_flags(ShaderStageFlags::MESH_EXT)
+        .build()];
+    let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
+        &device,
+        "descriptor_set_layout".into(),
+        DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&desc_layout_bindings)
+            .build(),
+    )?;
+
+    let descriptor_sets = descriptor_pool
+        .allocate_descriptor_sets("descriptor_set".into(), &[descriptor_set_layout.handle])?;
+
+    let pipeline_layout = UsamiDevice::create_pipeline_layout(
+        &device,
+        "base_pipeline_layout".into(),
+        &[descriptor_set_layout.handle],
+    )?;
 
     let mut active_shaders = Vec::new();
     let mut shader_stage_create_infos = Vec::new();
@@ -111,7 +148,7 @@ fn main() -> VkResult<()> {
     {
         let shader_code = usami::utils::read_spv_file(&args.mesh_path);
         let shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &shader_code)?;
-    
+
         shader_stage_create_infos.push(
             PipelineShaderStageCreateInfo::builder()
                 .module(shader.handle)
@@ -123,11 +160,10 @@ fn main() -> VkResult<()> {
     }
 
     {
-        let shader_code = usami::utils::as_u32_vec(include_bytes!(
-            "../../resources/mesh_tester/main.frag.spv"
-        ));
+        let shader_code =
+            usami::utils::as_u32_vec(include_bytes!("../../resources/mesh_tester/main.frag.spv"));
         let shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &shader_code)?;
-    
+
         shader_stage_create_infos.push(
             PipelineShaderStageCreateInfo::builder()
                 .module(shader.handle)
@@ -268,6 +304,32 @@ fn main() -> VkResult<()> {
         1,
     )?;
 
+    let data_buffer = UsamiDevice::create_buffer_with_size(
+        &device,
+        "data_buffer".into(),
+        BufferCreateFlags::empty(),
+        SharingMode::EXCLUSIVE,
+        BufferUsageFlags::UNIFORM_BUFFER,
+        0x1000,
+        MemoryPropertyFlags::HOST_VISIBLE,
+    )?;
+
+    unsafe {
+        device.handle.update_descriptor_sets(
+            &[WriteDescriptorSet::builder()
+                .dst_set(descriptor_sets[0].handle)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&[DescriptorBufferInfo::builder()
+                    .buffer(data_buffer.handle)
+                    .offset(0)
+                    .range(vk::WHOLE_SIZE)
+                    .build()])
+                .build()],
+            &[],
+        );
+    }
+
     usami::utils::record_command_buffer_with_image_dep(
         &command_buffers[0],
         &presentation.image,
@@ -293,6 +355,14 @@ fn main() -> VkResult<()> {
                     &render_pass_begin_info,
                     SubpassContents::INLINE,
                 );
+                vk_device.cmd_bind_descriptor_sets(
+                    command_buffer.handle,
+                    PipelineBindPoint::GRAPHICS,
+                    pipeline_layout.handle,
+                    0,
+                    &[descriptor_sets[0].handle],
+                    &[],
+                );
                 vk_device.cmd_bind_pipeline(
                     command_buffer.handle,
                     vk::PipelineBindPoint::GRAPHICS,
@@ -303,7 +373,12 @@ fn main() -> VkResult<()> {
 
                 let mesh_shader_access = MeshShader::new(vk_instance, vk_device);
 
-                mesh_shader_access.cmd_draw_mesh_tasks(command_buffer.handle, group_count_x, group_count_y, group_count_z);
+                mesh_shader_access.cmd_draw_mesh_tasks(
+                    command_buffer.handle,
+                    group_count_x,
+                    group_count_y,
+                    group_count_z,
+                );
                 vk_device.cmd_end_render_pass(command_buffer.handle);
 
                 ImageLayout::COLOR_ATTACHMENT_OPTIMAL
@@ -334,5 +409,8 @@ fn main() -> VkResult<()> {
         image::ImageFormat::Bmp,
     )
     .unwrap();
+
+    let data_buffer_readback = data_buffer.device_memory.read_to_vec();
+    println!("{data_buffer_readback:?}");
     Ok(())
 }
