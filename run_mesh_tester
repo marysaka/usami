@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -e
+
+glsl_path=$1
+output_dir=$PWD/output_tester_dir
+
+glsl_filename=$(basename -- "$glsl_path")
+shader_output_dir=$output_dir/$glsl_filename
+
+mkdir -p $shader_output_dir
+
+glslangValidator -g0 --target-env vulkan1.2 $glsl_path -o $shader_output_dir/output.spv
+./target/release/mesh_tester --mesh-path "$shader_output_dir/output.spv"
+nvdisasm --binary SM75 -hex /tmp/shader_nak_mesh.bin | tee $shader_output_dir/shader_data.asm
+
+
+if [ "$TERM_PROGRAM" = "vscode" ]; then
+  code output.bmp
+fi
