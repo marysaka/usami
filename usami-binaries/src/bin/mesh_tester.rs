@@ -91,7 +91,7 @@ fn main() -> VkResult<()> {
     let shader_entrypoint_name = CString::new("main").unwrap();
 
     let descriptor_pool_sizes = [vk::DescriptorPoolSize {
-        ty: vk::DescriptorType::UNIFORM_BUFFER,
+        ty: vk::DescriptorType::STORAGE_BUFFER,
         descriptor_count: 1,
     }];
     let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
@@ -107,7 +107,7 @@ fn main() -> VkResult<()> {
 
     let desc_layout_bindings = [vk::DescriptorSetLayoutBinding::builder()
         .binding(0)
-        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
         .descriptor_count(1)
         .stage_flags(ShaderStageFlags::MESH_EXT)
         .build()];
@@ -309,7 +309,7 @@ fn main() -> VkResult<()> {
         "data_buffer".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
-        BufferUsageFlags::UNIFORM_BUFFER,
+        BufferUsageFlags::STORAGE_BUFFER,
         0x1000,
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
@@ -319,7 +319,7 @@ fn main() -> VkResult<()> {
             &[WriteDescriptorSet::builder()
                 .dst_set(descriptor_sets[0].handle)
                 .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .buffer_info(&[DescriptorBufferInfo::builder()
                     .buffer(data_buffer.handle)
                     .offset(0)
