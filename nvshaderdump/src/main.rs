@@ -7,9 +7,24 @@ use std::{
 use argh::FromArgs;
 use reqwest::multipart::Part;
 
-#[derive(FromArgs)]
-/// Reach new heights.
+#[derive(FromArgs, PartialEq, Debug)]
+/// Top-level command.
 struct Args {
+    #[argh(subcommand)]
+    subcommand: SubCommandEnum,
+}
+
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
+enum SubCommandEnum {
+    Remote(RemoteSubCommand),
+    Local(LocalSubCommand),
+}
+
+/// Remotely ask a shader dump and deserialize it.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "remote")]
+struct RemoteSubCommand {
     /// the path to the SPIR-V file to send.
     #[argh(positional)]
     spirv_file_path: PathBuf,
@@ -39,7 +54,20 @@ struct Args {
     output_directory: Option<PathBuf>,
 }
 
-async fn get_shader_binary(args: &Args) -> Vec<u8> {
+/// Locally deserialize a NVVM container.
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "local")]
+struct LocalSubCommand {
+    /// the path to the NVVM file to deserialize.
+    #[argh(positional)]
+    nvvm_file_path: PathBuf,
+
+    /// the optional output directory to store the shader code and header.
+    #[argh(option)]
+    output_directory: Option<PathBuf>,
+}
+
+async fn get_shader_binary(args: &RemoteSubCommand) -> Vec<u8> {
     let url = format!("http://{}:{}/get_shader_binary", args.hostname, args.port);
 
     let mut spirv_data = Vec::new();
@@ -159,8 +187,7 @@ pub fn find_shader_data_offsets(
     None
 }
 
-pub fn get_shader_data(dec: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let nvuc_container = &dec[8..];
+pub fn get_shader_data(nvuc_container: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let (header_info, shader_info) =
         find_shader_data_offsets(nvuc_container).expect("Cannot find shader data offsets!");
 
@@ -198,35 +225,62 @@ pub fn get_shader_data(dec: &[u8]) -> (Vec<u8>, Vec<u8>) {
 async fn main() {
     let args: Args = argh::from_env();
 
-    let shader_binary = get_shader_binary(&args).await;
+    let (nvvm_container, output_directory) = match args {
+        Args {
+            subcommand: SubCommandEnum::Remote(args),
+        } => {
+            let shader_binary = get_shader_binary(&args).await;
 
-    if let Some(output_directory) = &args.output_directory {
-        std::fs::create_dir_all(output_directory).unwrap();
-    }
+            if let Some(output_directory) = &args.output_directory {
+                std::fs::create_dir_all(output_directory).unwrap();
+            }
 
-    if let Some(output_directory) = &args.output_directory {
-        let mut file = File::create(output_directory.join("shader_binary_raw.bin")).unwrap();
-        file.write_all(&shader_binary).unwrap();
-    }
+            if let Some(output_directory) = &args.output_directory {
+                let mut file =
+                    File::create(output_directory.join("shader_binary_raw.bin")).unwrap();
+                file.write_all(&shader_binary).unwrap();
+            }
 
-    if let Some(dec) = get_zstd_shader_blob(&shader_binary) {
-        if let Some(output_directory) = &args.output_directory {
-            let mut file = File::create(output_directory.join("shader_zstd_dec.bin")).unwrap();
-            file.write_all(&dec).unwrap();
+            if let Some(mut data) = get_zstd_shader_blob(&shader_binary) {
+                data.drain(0..8);
+
+                (Some(data), args.output_directory)
+            } else {
+                eprintln!("ZSTD header not found!");
+
+                (None, args.output_directory)
+            }
         }
 
-        let (shader_header_data, shader_binary_data) = get_shader_data(&dec);
+        Args {
+            subcommand: SubCommandEnum::Local(args),
+        } => {
+            let mut data = Vec::new();
 
-        if let Some(output_directory) = &args.output_directory {
+            let mut file = File::open(&args.nvvm_file_path).unwrap();
+
+            file.read_to_end(&mut data).unwrap();
+
+            data.drain(0..4);
+
+            (Some(data), args.output_directory)
+        }
+    };
+
+    if let Some(nvvm_container) = nvvm_container {
+        if let Some(output_directory) = &output_directory {
+            let mut file = File::create(output_directory.join("shader_zstd_dec.bin")).unwrap();
+            file.write_all(&nvvm_container).unwrap();
+        }
+
+        let (shader_header_data, shader_binary_data) = get_shader_data(&nvvm_container);
+
+        if let Some(output_directory) = &output_directory {
             let mut file = File::create(output_directory.join("shader_header.bin")).unwrap();
             file.write_all(&shader_header_data).unwrap();
-        }
 
-        if let Some(output_directory) = &args.output_directory {
             let mut file = File::create(output_directory.join("shader_data.bin")).unwrap();
             file.write_all(&shader_binary_data).unwrap();
         }
-    } else {
-        eprintln!("ZSTD header not found!");
     }
 }

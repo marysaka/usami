@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -e
+
+output_dir=$1
+nvvm_path=$2
+
+nvvm_filename=$(basename -- "$glsl_path")
+shader_output_dir=$output_dir/$nvvm_filename
+SM_VERSION=SM86
+
+
+mkdir -p $shader_output_dir
+
+cargo run --bin nvshaderdump -- local "$nvvm_path" --output-directory "$shader_output_dir"
+nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
+hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
+hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex

@@ -32,7 +32,7 @@ SM_VERSION=$SATEN_SM_VERSION
 #SM_VERSION=$KIYAMA_SM_VERSION
 
 glslangValidator -g0 --target-env vulkan1.3 $glsl_path -o $shader_output_dir/output.spv
-cargo run --bin nvshaderdump -- --hostname $IP --port 9999 --vendor-id $VENDOR_ID --device-id $DEVICE_ID "$shader_output_dir/output.spv" --output-directory "$shader_output_dir"
+cargo run --bin nvshaderdump -- remote --hostname $IP --port 9999 --vendor-id $VENDOR_ID --device-id $DEVICE_ID "$shader_output_dir/output.spv" --output-directory "$shader_output_dir"
 nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
 hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex
