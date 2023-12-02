@@ -36,6 +36,10 @@ struct Args {
     #[argh(option)]
     mesh_path: PathBuf,
 
+    /// the path to the frag shader to use.
+    #[argh(option)]
+    frag_path: Option<PathBuf>,
+
     /// the X size of the subgroup.
     #[argh(option)]
     group_count_x: Option<u32>,
@@ -66,7 +70,7 @@ fn main() -> VkResult<()> {
     )?;
     let device = UsamiDevice::new_by_filter(
         instance,
-        &["VK_EXT_mesh_shader".into()],
+        &["VK_EXT_mesh_shader".into(), "VK_KHR_spirv_1_4".into()],
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -160,9 +164,16 @@ fn main() -> VkResult<()> {
     }
 
     {
-        let shader_code =
+        let default_shader_code =
             usami::utils::as_u32_vec(include_bytes!("../../resources/mesh_tester/main.frag.spv"));
-        let shader = UsamiDevice::create_shader(&device, "mesh_shader".into(), &shader_code)?;
+
+        let shader_code = if let Some(frag_shader_path) = &args.frag_path {
+            usami::utils::read_spv_file(frag_shader_path)
+        } else {
+            default_shader_code
+        };
+
+        let shader = UsamiDevice::create_shader(&device, "frag_shader".into(), &shader_code)?;
 
         shader_stage_create_infos.push(
             PipelineShaderStageCreateInfo::builder()

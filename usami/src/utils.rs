@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, sync::Arc, path::Path};
+use std::{fs::File, io::Read, path::Path, sync::Arc};
 
 use ash::{
     prelude::VkResult,
