@@ -35,4 +35,5 @@ glslangValidator -g0 --target-env vulkan1.3 $glsl_path -o $shader_output_dir/out
 cargo run --bin nvshaderdump -- remote --hostname $IP --port 9999 --vendor-id $VENDOR_ID --device-id $DEVICE_ID "$shader_output_dir/output.spv" --output-directory "$shader_output_dir"
 nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
 hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
+hexdump -C $shader_output_dir/mesh_shader_header_gs.bin > $shader_output_dir/mesh_shader_header_gs.hex
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex

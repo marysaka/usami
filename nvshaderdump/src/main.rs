@@ -138,7 +138,11 @@ pub struct ShaderBlobInfo {
 
 pub fn find_shader_data_offsets(
     nvuc_container: &[u8],
-) -> Option<(Option<ShaderBlobInfo>, ShaderBlobInfo)> {
+) -> Option<(
+    Option<ShaderBlobInfo>,
+    ShaderBlobInfo,
+    Option<ShaderBlobInfo>,
+)> {
     let magic = u32::from_ne_bytes(nvuc_container[0..4].try_into().unwrap());
     assert!(magic == 0x6375564e);
 
@@ -147,6 +151,7 @@ pub fn find_shader_data_offsets(
     let nvuc_section_header = &nvuc_container[32..];
 
     let mut header_blob = None;
+    let mut mesh_gs_header_blob = None;
     let mut code_blob = None;
 
     for section_index in 0..section_count {
@@ -177,18 +182,23 @@ pub fn find_shader_data_offsets(
                 offset: section_offset,
                 size: section_size,
             })
+        } else if section_id == 0x4d {
+            mesh_gs_header_blob = Some(ShaderBlobInfo {
+                offset: section_offset,
+                size: section_size,
+            })
         }
     }
 
     if let Some(code_blob) = code_blob {
-        return Some((header_blob, code_blob));
+        return Some((header_blob, code_blob, mesh_gs_header_blob));
     }
 
     None
 }
 
-pub fn get_shader_data(nvuc_container: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let (header_info, shader_info) =
+pub fn get_shader_data(nvuc_container: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let (header_info, shader_info, mesh_gs_header_info) =
         find_shader_data_offsets(nvuc_container).expect("Cannot find shader data offsets!");
 
     let header_data = if let Some(header_info) = header_info {
@@ -215,9 +225,16 @@ pub fn get_shader_data(nvuc_container: &[u8]) -> (Vec<u8>, Vec<u8>) {
         Vec::new()
     };
 
+    let mesh_gs_header_data = if let Some(header_info) = mesh_gs_header_info {
+        nvuc_container[header_info.offset..header_info.offset + header_info.size].into()
+    } else {
+        Vec::new()
+    };
+
     (
         header_data,
         nvuc_container[shader_info.offset..shader_info.offset + shader_info.size].into(),
+        mesh_gs_header_data,
     )
 }
 
@@ -273,7 +290,7 @@ async fn main() {
             file.write_all(&nvvm_container).unwrap();
         }
 
-        let (shader_header_data, shader_binary_data) = get_shader_data(&nvvm_container);
+        let (shader_header_data, shader_binary_data, mesh_gs_header_data) = get_shader_data(&nvvm_container);
 
         if let Some(output_directory) = &output_directory {
             let mut file = File::create(output_directory.join("shader_header.bin")).unwrap();
@@ -281,6 +298,10 @@ async fn main() {
 
             let mut file = File::create(output_directory.join("shader_data.bin")).unwrap();
             file.write_all(&shader_binary_data).unwrap();
+
+            let mut file =
+                File::create(output_directory.join("mesh_shader_header_gs.bin")).unwrap();
+            file.write_all(&mesh_gs_header_data).unwrap();
         }
     }
 }
