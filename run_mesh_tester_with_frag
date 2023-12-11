@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e
+
+glsl_path=$1
+frag_glsl_path=$2
+group_size_x=1
+group_size_y=1
+group_size_z=1
+output_dir=$PWD/output_tester_dir
+
+glsl_filename=$(basename -- "$glsl_path")
+shader_output_dir=$output_dir/$glsl_filename
+
+mkdir -p $shader_output_dir
+
+glslangValidator -g0 --target-env vulkan1.2 $glsl_path -o $shader_output_dir/output.spv
+glslangValidator -g0 --target-env vulkan1.2 $frag_glsl_path -o $shader_output_dir/output.frag.spv
+
+./target/release/mesh_tester --mesh-path "$shader_output_dir/output.spv"      \
+                             --frag-path "$shader_output_dir/output.frag.spv" \
+                             --group-count-x "$group_size_x"                  \
+                             --group-count-y "$group_size_y"                  \
+                             --group-count-z "$group_size_z"                  \
+
+(nvdisasm --binary SM75 -hex /tmp/shader_nak_mesh.bin | tee $shader_output_dir/shader_data.asm) || true
+(hexdump -C /tmp/shader_hdr_nak_mesh.bin &> $shader_output_dir/shader_header.hex) || true
+(hexdump -C /tmp/shader_hdr_nak_mesh_gs.bin > $shader_output_dir/mesh_shader_header_gs.hex) || true
+
+if [ "$TERM_PROGRAM" = "vscode" ]; then
+  code output.bmp
+fi
