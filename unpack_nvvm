@@ -15,4 +15,5 @@ mkdir -p $shader_output_dir
 cargo run --bin nvshaderdump -- local "$nvvm_path" --output-directory "$shader_output_dir"
 nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
 hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
+hexdump -C $shader_output_dir/mesh_shader_header_gs.bin > $shader_output_dir/mesh_shader_header_gs.hex
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex
