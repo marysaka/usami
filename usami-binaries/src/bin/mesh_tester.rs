@@ -51,6 +51,10 @@ struct Args {
     /// the Z size of the subgroup.
     #[argh(option)]
     group_count_z: Option<u32>,
+
+    /// the path of the file to store the output buffer.
+    #[argh(option)]
+    output_buffer_file: Option<PathBuf>,
 }
 
 fn main() -> VkResult<()> {
@@ -421,7 +425,11 @@ fn main() -> VkResult<()> {
     )
     .unwrap();
 
-    let data_buffer_readback = data_buffer.device_memory.read_to_vec();
+    let data_buffer_readback = data_buffer.device_memory.read_to_vec().unwrap();
+
+    if let Some(output_buffer_file) = args.output_buffer_file {
+        std::fs::write(output_buffer_file, &data_buffer_readback).unwrap();
+    }
     println!("{data_buffer_readback:?}");
     Ok(())
 }

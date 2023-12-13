@@ -1,8 +1,9 @@
 #version 450
 #extension GL_EXT_mesh_shader : require
 
+
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-layout(points, max_vertices = 256, max_primitives = 256) out;
+layout(points, max_vertices = 4, max_primitives = 4) out;
 
 layout(location = 0) out mesh_output
 {
@@ -21,8 +22,23 @@ const vec4[3] c_colors = {
 	vec4(1.0, 0.0, 0.0, 1.0)
 };
 
+struct shared_element
+{
+  float value;
+  double big_value;
+  int16_t tiny_value;
+  int16_t tiny_value2;
+};
+
+shared shared_element sharedElement;
+
 void main()
 {
+	sharedElement.value = 42.0f;
+	sharedElement.big_value = 21.0;
+	sharedElement.tiny_value = 1;
+	sharedElement.tiny_value2 = 2;
+
     // Define four points, one being at the same position as another one.
 	SetMeshOutputsEXT(1, 4);
 
