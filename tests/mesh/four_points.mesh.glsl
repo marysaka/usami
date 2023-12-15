@@ -22,23 +22,8 @@ const vec4[3] c_colors = {
 	vec4(1.0, 0.0, 0.0, 1.0)
 };
 
-struct shared_element
-{
-  float value;
-  double big_value;
-  int16_t tiny_value;
-  int16_t tiny_value2;
-};
-
-shared shared_element sharedElement;
-
 void main()
 {
-	sharedElement.value = 42.0f;
-	sharedElement.big_value = 21.0;
-	sharedElement.tiny_value = 1;
-	sharedElement.tiny_value2 = 2;
-
     // Define four points, one being at the same position as another one.
 	SetMeshOutputsEXT(1, 4);
 

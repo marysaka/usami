@@ -1,7 +1,9 @@
 #version 450
 #extension GL_EXT_mesh_shader : enable
 
-layout (local_size_x=128, local_size_y=1, local_size_z=1) in;
+const uint invocationCount = 128;
+
+layout (local_size_x=invocationCount, local_size_y=1, local_size_z=1) in;
 layout (triangles) out;
 layout (max_vertices=3, max_primitives=1) out;
 const uint payloadElements = 1u;
@@ -14,15 +16,13 @@ layout(binding = 0) buffer UniformBufferObject {
     uint sharedMemoryErrorIndex;
     uint sharedMemoryErrorValue;
     uint sharedMemoryErrorExpected;
-    uint localInvocationCount[128];
+    uint localInvocationCount[invocationCount];
 } result;
 
 shared uint sharedElements[sharedMemoryElements];
 
 void main () {
-    result.localInvocationCount[gl_LocalInvocationIndex] = gl_LocalInvocationIndex + 1;
-
-    const uint shMemElementsPerInvocation = uint(ceil(float(sharedMemoryElements) / float(128)));
+    const uint shMemElementsPerInvocation = uint(ceil(float(sharedMemoryElements) / float(invocationCount)));
     for (uint i = 0u; i < shMemElementsPerInvocation; ++i) {
         const uint elemIdx = shMemElementsPerInvocation * gl_LocalInvocationIndex + i;
         if (elemIdx < sharedMemoryElements) {
@@ -36,6 +36,10 @@ void main () {
         if (elemIdx < sharedMemoryElements) {
             const uint accessIdx = sharedMemoryElements - 1u - elemIdx;
             sharedElements[accessIdx] += accessIdx;
+
+            if (accessIdx == 1) {
+                result.localInvocationCount[gl_LocalInvocationIndex] = sharedElements[accessIdx];
+            }
         }
     }
     memoryBarrierShared();
