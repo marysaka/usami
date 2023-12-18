@@ -7,15 +7,20 @@ const uint taskInvocationCount = 1;
 const uint meshInvocationCount = 1;
 layout (local_size_x=taskInvocationCount, local_size_y=1, local_size_z=1) in;
 
+struct TaskData {
+    uint value;
+};
+
 layout(binding = 0) buffer UniformBufferObject {
     uint taskInvocations[taskInvocationCount * workGroupSize];
-    uint meshInvocations[meshInvocationCount * workGroupSize];
 } result;
+
+taskPayloadSharedEXT TaskData td;
 
 void main() 
 {
     const uint workGroupIndex = gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_WorkGroupID.z + gl_NumWorkGroups.x * gl_WorkGroupID.y + gl_WorkGroupID.x;
-    result.taskInvocations[gl_LocalInvocationIndex + workGroupIndex] = workGroupIndex + 1;
+    td.value = workGroupIndex;
 
-	EmitMeshTasksEXT(workGroupSize, 1, 1);
+	EmitMeshTasksEXT(4, 1, 1);
 }

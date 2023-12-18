@@ -4,7 +4,7 @@ set -e
 
 glsl_path=$1
 task_glsl_path=$2
-group_size_x=4
+group_size_x=1
 group_size_y=1
 group_size_z=1
 output_dir=$PWD/output_tester_dir
