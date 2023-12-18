@@ -117,7 +117,7 @@ fn main() -> VkResult<()> {
         .binding(0)
         .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
         .descriptor_count(1)
-        .stage_flags(ShaderStageFlags::MESH_EXT)
+        .stage_flags(ShaderStageFlags::TASK_EXT | ShaderStageFlags::MESH_EXT)
         .build()];
     let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
         &device,

@@ -15,7 +15,7 @@ layout(binding = 0) buffer UniformBufferObject {
 void main() 
 {
     const uint workGroupIndex = gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_WorkGroupID.z + gl_NumWorkGroups.x * gl_WorkGroupID.y + gl_WorkGroupID.x;
-    result.taskInvocations[gl_LocalInvocationIndex + workGroupIndex] = workGroupIndex;
+    result.taskInvocations[gl_LocalInvocationIndex + workGroupIndex] = workGroupIndex + 1;
 
-	EmitMeshTasksEXT(1, 1, 1);
+	EmitMeshTasksEXT(workGroupSize, 1, 1);
 }
