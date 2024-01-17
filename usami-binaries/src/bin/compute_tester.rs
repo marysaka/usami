@@ -132,21 +132,22 @@ fn main() -> VkResult<()> {
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    unsafe {
-        device.handle.update_descriptor_sets(
-            &[WriteDescriptorSet::builder()
-                .dst_set(descriptor_sets[0].handle)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .buffer_info(&[DescriptorBufferInfo::builder()
-                    .buffer(data_buffer.handle)
-                    .offset(0)
-                    .range(vk::WHOLE_SIZE)
-                    .build()])
-                .build()],
-            &[],
-        );
-    }
+    // Break internally in panvk2 atm
+    //unsafe {
+    //    device.handle.update_descriptor_sets(
+    //        &[WriteDescriptorSet::builder()
+    //            .dst_set(descriptor_sets[0].handle)
+    //            .dst_binding(0)
+    //            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+    //            .buffer_info(&[DescriptorBufferInfo::builder()
+    //                .buffer(data_buffer.handle)
+    //                .offset(0)
+    //                .range(vk::WHOLE_SIZE)
+    //                .build()])
+    //            .build()],
+    //        &[],
+    //    );
+    //}
 
     let pipeline_layout = UsamiDevice::create_pipeline_layout(
         &device,
