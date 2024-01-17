@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -e
+
+glsl_path=$1
+group_size_x=1
+group_size_y=1
+group_size_z=1
+output_dir=$PWD/output_tester_dir
+
+glsl_filename=$(basename -- "$glsl_path")
+shader_output_dir=$output_dir/$glsl_filename
+
+mkdir -p $shader_output_dir
+
+glslangValidator -g0 --target-env vulkan1.0 $glsl_path -o $shader_output_dir/output.spv
+LD_PRELOAD=$MESA_BUILD_DIR/src/panfrost/drm-shim/libpanfrost_noop_drm_shim.so \
+./target/release/compute_tester --compute-path "$shader_output_dir/output.spv"           \
+                             --group-count-x "$group_size_x"                             \
+                             --group-count-y "$group_size_y"                             \
+                             --group-count-z "$group_size_z"                             \
+                             --output-buffer-file "$shader_output_dir/output_buffer.bin" \
+
+(hexdump -C $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
+
+if [ "$TERM_PROGRAM" = "vscode" ]; then
+  code $shader_output_dir/output_buffer.hex
+  true
+fi
