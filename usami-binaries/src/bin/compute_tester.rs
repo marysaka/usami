@@ -160,7 +160,6 @@ fn main() -> VkResult<()> {
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    // Break internally in panvk2 atm
     unsafe {
         device.handle.update_descriptor_sets(
             &[
