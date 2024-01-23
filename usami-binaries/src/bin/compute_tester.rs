@@ -52,7 +52,7 @@ fn main() -> VkResult<()> {
         "usami",
         vk::API_VERSION_1_0,
         &extensions,
-        true,
+        false,
     )?;
     let device = UsamiDevice::new_by_filter(
         instance,
@@ -90,10 +90,17 @@ fn main() -> VkResult<()> {
     );
     active_shaders.push(shader);
 
-    let descriptor_pool_sizes = [vk::DescriptorPoolSize {
-        ty: vk::DescriptorType::STORAGE_BUFFER,
-        descriptor_count: 1,
-    }];
+    let descriptor_pool_sizes = [
+        vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::STORAGE_BUFFER,
+            descriptor_count: 1,
+        },
+        vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+        },
+    ];
+
     let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
         .pool_sizes(&descriptor_pool_sizes)
         .max_sets(1)
@@ -105,12 +112,20 @@ fn main() -> VkResult<()> {
         descriptor_pool_create_info,
     )?;
 
-    let desc_layout_bindings = [vk::DescriptorSetLayoutBinding::builder()
-        .binding(0)
-        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-        .descriptor_count(1)
-        .stage_flags(ShaderStageFlags::COMPUTE)
-        .build()];
+    let desc_layout_bindings = [
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(ShaderStageFlags::COMPUTE)
+            .build(),
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(1)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(ShaderStageFlags::COMPUTE)
+            .build(),
+    ];
     let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
         &device,
         "descriptor_set_layout".into(),
@@ -120,7 +135,20 @@ fn main() -> VkResult<()> {
     )?;
 
     let descriptor_sets = descriptor_pool
-        .allocate_descriptor_sets("descriptor_set".into(), &[descriptor_set_layout.handle])?;
+        .allocate_descriptor_sets("descriptor_set".into(), &[descriptor_set_layout.handle]);
+
+    println!("{:?}", descriptor_sets.as_ref().err());
+
+    let descriptor_sets = descriptor_sets?;
+
+    let uniform_block = UsamiDevice::create_buffer(
+        &device,
+        "uniform_block".into(),
+        BufferCreateFlags::empty(),
+        SharingMode::EXCLUSIVE,
+        BufferUsageFlags::UNIFORM_BUFFER,
+        &[0x42u32],
+    )?;
 
     let data_buffer = UsamiDevice::create_buffer_with_size(
         &device,
@@ -133,21 +161,33 @@ fn main() -> VkResult<()> {
     )?;
 
     // Break internally in panvk2 atm
-    //unsafe {
-    //    device.handle.update_descriptor_sets(
-    //        &[WriteDescriptorSet::builder()
-    //            .dst_set(descriptor_sets[0].handle)
-    //            .dst_binding(0)
-    //            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-    //            .buffer_info(&[DescriptorBufferInfo::builder()
-    //                .buffer(data_buffer.handle)
-    //                .offset(0)
-    //                .range(vk::WHOLE_SIZE)
-    //                .build()])
-    //            .build()],
-    //        &[],
-    //    );
-    //}
+    unsafe {
+        device.handle.update_descriptor_sets(
+            &[
+                WriteDescriptorSet::builder()
+                    .dst_set(descriptor_sets[0].handle)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[DescriptorBufferInfo::builder()
+                        .buffer(data_buffer.handle)
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)
+                        .build()])
+                    .build(),
+                WriteDescriptorSet::builder()
+                    .dst_set(descriptor_sets[0].handle)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .buffer_info(&[DescriptorBufferInfo::builder()
+                        .buffer(uniform_block.handle)
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)
+                        .build()])
+                    .build(),
+            ],
+            &[],
+        );
+    }
 
     let pipeline_layout = UsamiDevice::create_pipeline_layout(
         &device,
