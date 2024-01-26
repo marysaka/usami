@@ -4,11 +4,14 @@ use argh::FromArgs;
 use ash::{
     prelude::VkResult,
     vk::{
-        self, BufferCreateFlags, BufferUsageFlags, CommandBufferLevel, CommandBufferUsageFlags,
-        CommandPoolCreateFlags, CommandPoolCreateInfo, ComputePipelineCreateInfo,
-        DescriptorBufferInfo, DescriptorPoolCreateInfo, DescriptorSetLayoutCreateInfo,
-        FenceCreateFlags, MemoryPropertyFlags, PipelineBindPoint, PipelineCache,
-        PipelineShaderStageCreateInfo, QueueFlags, ShaderStageFlags, SharingMode, SubmitInfo,
+        self, AccessFlags, BufferCreateFlags, BufferUsageFlags, CommandBufferLevel,
+        CommandBufferUsageFlags, CommandPoolCreateFlags, CommandPoolCreateInfo, ComponentMapping,
+        ComponentSwizzle, ComputePipelineCreateInfo, DescriptorBufferInfo, DescriptorImageInfo,
+        DescriptorPoolCreateInfo, DescriptorSetLayoutCreateInfo, Extent3D, FenceCreateFlags,
+        Format, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
+        ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags,
+        PipelineBindPoint, PipelineCache, PipelineShaderStageCreateInfo, PipelineStageFlags,
+        QueueFlags, SampleCountFlags, ShaderStageFlags, SharingMode, SubmitInfo,
         WriteDescriptorSet,
     },
 };
@@ -44,6 +47,7 @@ fn main() -> VkResult<()> {
     let group_count_x = args.group_count_x.unwrap_or(1);
     let group_count_y = args.group_count_y.unwrap_or(1);
     let group_count_z = args.group_count_z.unwrap_or(1);
+    let width = 128;
 
     let extensions = ["VK_EXT_debug_utils".into()];
 
@@ -99,6 +103,10 @@ fn main() -> VkResult<()> {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
         },
+        vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::STORAGE_IMAGE,
+            descriptor_count: 1,
+        },
     ];
 
     let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
@@ -122,6 +130,12 @@ fn main() -> VkResult<()> {
         vk::DescriptorSetLayoutBinding::builder()
             .binding(1)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(ShaderStageFlags::COMPUTE)
+            .build(),
+        vk::DescriptorSetLayoutBinding::builder()
+            .binding(2)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
             .descriptor_count(1)
             .stage_flags(ShaderStageFlags::COMPUTE)
             .build(),
@@ -160,6 +174,56 @@ fn main() -> VkResult<()> {
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
+    let output_image_info = ImageCreateInfo::builder()
+        .image_type(ImageType::TYPE_1D)
+        .format(Format::R32_SFLOAT)
+        .extent(Extent3D {
+            width,
+            height: 1,
+            depth: 1,
+        })
+        .mip_levels(1)
+        .array_layers(1)
+        .samples(SampleCountFlags::TYPE_1)
+        .tiling(ImageTiling::OPTIMAL)
+        .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::TRANSFER_SRC)
+        .build();
+
+    let output_image = UsamiDevice::create_image(
+        &device,
+        "output_image".into(),
+        output_image_info,
+        MemoryPropertyFlags::empty(),
+    )?;
+    let output_image_view = output_image.create_simple_image_view(
+        "output_image_view".into(),
+        ImageViewType::TYPE_1D,
+        ImageSubresourceRange::builder()
+            .aspect_mask(ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(output_image.create_info.array_layers)
+            .build(),
+        ComponentMapping::builder()
+            .r(ComponentSwizzle::IDENTITY)
+            .g(ComponentSwizzle::IDENTITY)
+            .b(ComponentSwizzle::IDENTITY)
+            .a(ComponentSwizzle::IDENTITY)
+            .build(),
+        ImageViewCreateFlags::empty(),
+    )?;
+
+    let output_readback_buffer = UsamiDevice::create_buffer_with_size(
+        &device,
+        "output_readback_buffer".into(),
+        BufferCreateFlags::empty(),
+        SharingMode::EXCLUSIVE,
+        BufferUsageFlags::TRANSFER_DST,
+        u64::from(width * 4 * output_image_info.array_layers),
+        MemoryPropertyFlags::HOST_VISIBLE,
+    )?;
+
     unsafe {
         device.handle.update_descriptor_sets(
             &[
@@ -181,6 +245,15 @@ fn main() -> VkResult<()> {
                         .buffer(uniform_block.handle)
                         .offset(0)
                         .range(vk::WHOLE_SIZE)
+                        .build()])
+                    .build(),
+                WriteDescriptorSet::builder()
+                    .dst_set(descriptor_sets[0].handle)
+                    .dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                    .image_info(&[DescriptorImageInfo::builder()
+                        .image_layout(ImageLayout::GENERAL)
+                        .image_view(output_image_view.handle)
                         .build()])
                     .build(),
             ],
@@ -252,6 +325,18 @@ fn main() -> VkResult<()> {
                     group_count_z,
                 );
             }
+
+            command_buffer.copy_image_to_buffer(
+                &output_image,
+                &output_readback_buffer,
+                &[output_image.buffer_copy(ImageAspectFlags::COLOR, 0, 0, 1)],
+                AccessFlags::empty(),
+                ImageLayout::UNDEFINED,
+                output_image.create_info.array_layers,
+                output_image.create_info.mip_levels,
+                ImageAspectFlags::COLOR,
+                PipelineStageFlags::COMPUTE_SHADER,
+            )?;
 
             Ok(())
         },
