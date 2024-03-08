@@ -80,7 +80,7 @@ fn main() -> VkResult<()> {
     let shader_entrypoint_name = CString::new("main").unwrap();
 
     let pipeline_layout =
-        UsamiDevice::create_pipeline_layout(&device, "base_pipeline_layout".into(), &[])?;
+        UsamiDevice::create_pipeline_layout(&device, "base_pipeline_layout".into(), &[], &[])?;
 
     let shader_stage_create_infos = [
         PipelineShaderStageCreateInfo::builder()

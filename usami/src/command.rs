@@ -3,11 +3,11 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, CommandBuffer,
+        self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, ClearColorValue, CommandBuffer,
         CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel,
         CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, Handle,
-        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, ObjectType,
-        PipelineStageFlags,
+        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, MemoryBarrier,
+        ObjectType, PipelineStageFlags,
     },
 };
 
@@ -177,6 +177,67 @@ impl UsamiCommandBuffer {
                 &[],
             );
         }
+
+        Ok(())
+    }
+
+    pub fn add_memory_barrier(
+        &self,
+        src_stage_mask: PipelineStageFlags,
+        dst_stage_mask: PipelineStageFlags,
+        src_access_mask: AccessFlags,
+        dst_access_mask: AccessFlags,
+    ) -> VkResult<()> {
+        unsafe {
+            self.device.handle.cmd_pipeline_barrier(
+                self.handle,
+                src_stage_mask,
+                dst_stage_mask,
+                DependencyFlags::empty(),
+                &[MemoryBarrier::builder()
+                    .src_access_mask(src_access_mask)
+                    .dst_access_mask(dst_access_mask)
+                    .build()],
+                &[],
+                &[],
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn clear_image(&self, image: &UsamiImage, r: f32, g: f32, b: f32, a: f32) -> VkResult<()> {
+        self.add_image_barrier(
+            image,
+            None,
+            PipelineStageFlags::TOP_OF_PIPE,
+            PipelineStageFlags::TRANSFER,
+            AccessFlags::empty(),
+            AccessFlags::TRANSFER_WRITE,
+            ImageLayout::UNDEFINED,
+            ImageLayout::GENERAL,
+        )?;
+
+        unsafe {
+            self.device.handle.cmd_clear_color_image(
+                self.handle,
+                image.handle,
+                ImageLayout::GENERAL,
+                &ClearColorValue {
+                    float32: [r, g, b, a],
+                },
+                &[ImageSubresourceRange::builder()
+                    .aspect_mask(ImageAspectFlags::COLOR)
+                    .build()],
+            );
+        }
+
+        self.add_memory_barrier(
+            PipelineStageFlags::TRANSFER,
+            PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            AccessFlags::TRANSFER_WRITE,
+            AccessFlags::COLOR_ATTACHMENT_READ | AccessFlags::COLOR_ATTACHMENT_WRITE,
+        )?;
 
         Ok(())
     }

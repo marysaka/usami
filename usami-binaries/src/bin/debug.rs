@@ -287,6 +287,7 @@ fn main() -> VkResult<()> {
             uniform_descriptor_set_layout.handle,
             sampler_descriptor_set_layout.handle,
         ],
+        &[],
     )?;
 
     let shader_stage_create_infos = [

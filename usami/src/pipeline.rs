@@ -5,7 +5,7 @@ use ash::{
     vk::{
         ComputePipelineCreateInfo, DescriptorSetLayout, GraphicsPipelineCreateInfo, Handle,
         ObjectType, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
-        PipelineLayoutCreateInfo,
+        PipelineLayoutCreateInfo, PushConstantRange,
     },
 };
 
@@ -17,9 +17,14 @@ pub struct UsamiPipelineLayout {
 }
 
 impl UsamiPipelineLayout {
-    pub fn new(device: &Arc<UsamiDevice>, layouts: &[DescriptorSetLayout]) -> VkResult<Self> {
+    pub fn new(
+        device: &Arc<UsamiDevice>,
+        set_layouts: &[DescriptorSetLayout],
+        push_constant_ranges: &[PushConstantRange],
+    ) -> VkResult<Self> {
         let create_info = PipelineLayoutCreateInfo::builder()
-            .set_layouts(layouts)
+            .set_layouts(set_layouts)
+            .push_constant_ranges(push_constant_ranges)
             .flags(PipelineLayoutCreateFlags::empty())
             .build();
 
@@ -101,9 +106,10 @@ impl UsamiDevice {
     pub fn create_pipeline_layout(
         device: &Arc<UsamiDevice>,
         name: String,
-        layouts: &[DescriptorSetLayout],
+        set_layouts: &[DescriptorSetLayout],
+        push_constant_ranges: &[PushConstantRange],
     ) -> VkResult<UsamiPipelineLayout> {
-        let pipeline_layout = UsamiPipelineLayout::new(device, layouts)?;
+        let pipeline_layout = UsamiPipelineLayout::new(device, set_layouts, push_constant_ranges)?;
 
         device.set_debug_name(
             name,

@@ -8,13 +8,16 @@ use ash::{
     prelude::*,
     vk::{
         BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent2D, Extent3D,
-        Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
+        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
+        ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
+        FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
         ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceFeatures,
+        MemoryPropertyFlags, ObjectType, PhysicalDevice,
+        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures,
         PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
-        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT, QueueFamilyProperties,
-        Rect2D, SampleCountFlags, SharingMode, Viewport,
+        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT,
+        PhysicalDeviceTransformFeedbackFeaturesEXT, QueueFamilyProperties, Rect2D,
+        SampleCountFlags, SharingMode, Viewport,
     },
 };
 
@@ -78,6 +81,8 @@ impl UsamiDevice {
 
         let mut has_shader_object_extension = false;
         let mut has_mesh_shader_extension = false;
+        let mut has_conditional_rendering_extension = false;
+        let mut has_xfb_extension = false;
 
         for extension in &extensions_cstring {
             if ShaderObject::name() == extension.as_c_str() {
@@ -87,6 +92,14 @@ impl UsamiDevice {
             if MeshShader::name() == extension.as_c_str() {
                 has_mesh_shader_extension = true;
             }
+
+            if ExtConditionalRenderingFn::name() == extension.as_c_str() {
+                has_conditional_rendering_extension = true;
+            }
+
+            if ExtTransformFeedbackFn::name() == extension.as_c_str() {
+                has_xfb_extension = true;
+            }
         }
 
         let extensions_raw: Vec<*const c_char> = extensions_cstring
@@ -94,7 +107,15 @@ impl UsamiDevice {
             .map(|raw_name| raw_name.as_ptr())
             .collect();
 
-        let enabled_features = PhysicalDeviceFeatures::default();
+        let enabled_features = PhysicalDeviceFeatures::builder()
+            .geometry_shader(physical_device.features.geometry_shader != 0)
+            .shader_tessellation_and_geometry_point_size(
+                physical_device
+                    .features
+                    .shader_tessellation_and_geometry_point_size
+                    != 0,
+            )
+            .build();
 
         let device_queue_create_info = [DeviceQueueCreateInfo::builder()
             .queue_family_index(vk_queue_index)
@@ -110,6 +131,15 @@ impl UsamiDevice {
             .task_shader(true)
             .build();
 
+        let mut conditional_rendering_features =
+            PhysicalDeviceConditionalRenderingFeaturesEXT::builder()
+                .conditional_rendering(true)
+                .build();
+
+        let mut xfb_features = PhysicalDeviceTransformFeedbackFeaturesEXT::builder()
+            .transform_feedback(true)
+            .build();
+
         let mut create_info_builder = DeviceCreateInfo::builder()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
@@ -121,6 +151,15 @@ impl UsamiDevice {
 
         if has_mesh_shader_extension {
             create_info_builder = create_info_builder.push_next(&mut mesh_shader_features);
+        }
+
+        if has_conditional_rendering_extension {
+            create_info_builder =
+                create_info_builder.push_next(&mut conditional_rendering_features);
+        }
+
+        if has_xfb_extension {
+            create_info_builder = create_info_builder.push_next(&mut xfb_features);
         }
 
         let create_info = create_info_builder.build();

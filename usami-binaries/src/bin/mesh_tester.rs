@@ -134,6 +134,7 @@ fn main() -> VkResult<()> {
         &device,
         "base_pipeline_layout".into(),
         &[descriptor_set_layout.handle],
+        &[],
     )?;
 
     let mut active_shaders = Vec::new();

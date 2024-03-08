@@ -265,6 +265,7 @@ fn main() -> VkResult<()> {
         &device,
         "base_pipeline_layout".into(),
         &[descriptor_set_layout.handle],
+        &[],
     )?;
 
     let compute_pipeline_create_info = ComputePipelineCreateInfo::builder()

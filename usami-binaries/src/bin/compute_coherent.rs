@@ -162,6 +162,7 @@ fn main() -> VkResult<()> {
         &device,
         "base_pipeline_layout".into(),
         &[descriptor_set_layout.handle],
+        &[],
     )?;
 
     let shader_entrypoint_name = CString::new("main").unwrap();

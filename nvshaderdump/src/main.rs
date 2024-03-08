@@ -290,7 +290,8 @@ async fn main() {
             file.write_all(&nvvm_container).unwrap();
         }
 
-        let (shader_header_data, shader_binary_data, mesh_gs_header_data) = get_shader_data(&nvvm_container);
+        let (shader_header_data, shader_binary_data, mesh_gs_header_data) =
+            get_shader_data(&nvvm_container);
 
         if let Some(output_directory) = &output_directory {
             let mut file = File::create(output_directory.join("shader_header.bin")).unwrap();
