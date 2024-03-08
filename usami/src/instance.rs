@@ -18,6 +18,7 @@ pub struct UsamiInstance {
     pub vk_instance: ash::Instance,
     pub vk_debug_utils_loader: DebugUtils,
     pub vk_messenger: DebugUtilsMessengerEXT,
+    pub vk_version: u32,
 }
 
 unsafe extern "system" fn vulkan_debug_callback(
@@ -112,6 +113,7 @@ impl UsamiInstance {
             vk_instance,
             vk_debug_utils_loader,
             vk_messenger,
+            vk_version: api_version,
         })
     }
 }

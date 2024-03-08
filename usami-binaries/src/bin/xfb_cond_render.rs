@@ -7,23 +7,21 @@ use ash::{
         AttachmentStoreOp, BlendFactor, BlendOp, BufferCreateFlags, BufferUsageFlags,
         ClearColorValue, ClearValue, ColorComponentFlags, CommandBufferLevel,
         CommandBufferUsageFlags, CommandPoolCreateFlags, CommandPoolCreateInfo, CompareOp,
-        ConditionalRenderingBeginInfoEXT, DependencyFlags, DynamicState, ExtTransformFeedbackFn,
-        FenceCreateFlags, Format, FrontFace, GraphicsPipelineCreateInfo, ImageAspectFlags,
-        ImageLayout, ImageSubresourceRange, LogicOp, MemoryPropertyFlags, PhysicalDeviceType,
+        ConditionalRenderingBeginInfoEXT, FenceCreateFlags, Format, FrontFace,
+        GraphicsPipelineCreateInfo, ImageLayout, LogicOp, MemoryPropertyFlags, PhysicalDeviceType,
         PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
         PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-        PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo,
+        PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
         PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineStageFlags,
         PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
         PrimitiveTopology, PushConstantRange, QueryControlFlags, QueryPoolCreateInfo,
         QueryResultFlags, QueryType, QueueFlags, RenderPassBeginInfo, RenderPassCreateInfo,
         SampleCountFlags, ShaderStageFlags, SharingMode, StencilOp, StencilOpState, SubmitInfo,
-        SubpassContents, SubpassDependency, SubpassDescription, VertexInputAttributeDescription,
+        SubpassContents, SubpassDescription, VertexInputAttributeDescription,
         VertexInputBindingDescription, VertexInputRate,
     },
 };
-use usami::{command, offset_of, UsamiBuffer, UsamiDevice, UsamiInstance, UsamiPresentation};
+use usami::{offset_of, UsamiDevice, UsamiInstance, UsamiPresentation};
 use usami_binaries::ash_ext::{ConditionalRendering, TransformFeedback};
 
 #[derive(Clone, Debug, Copy)]
@@ -202,9 +200,9 @@ fn main() -> VkResult<()> {
         UsamiDevice::create_shader(&device, "vertex_fetch.geom".into(), &geom_shader_code)?;
     let shader_entrypoint_name = CString::new("main").unwrap();
 
-    let pipeline_layout = UsamiDevice::create_pipeline_layout(
+    let stream_pipeline_layout = UsamiDevice::create_pipeline_layout(
         &device,
-        "base_pipeline_layout".into(),
+        "stream_pipeline_layout".into(),
         &[],
         &[PushConstantRange::builder()
             .stage_flags(ShaderStageFlags::GEOMETRY)
@@ -213,23 +211,8 @@ fn main() -> VkResult<()> {
             .build()],
     )?;
 
-    let shader_stage_create_infos = [
-        PipelineShaderStageCreateInfo::builder()
-            .module(vertex_shader.handle)
-            .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::VERTEX)
-            .build(),
-        PipelineShaderStageCreateInfo::builder()
-            .module(geom_shader.handle)
-            .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::GEOMETRY)
-            .build(),
-        PipelineShaderStageCreateInfo::builder()
-            .module(frag_shader.handle)
-            .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::FRAGMENT)
-            .build(),
-    ];
+    let basic_pipeline_layout =
+        UsamiDevice::create_pipeline_layout(&device, "basic_pipeline_layout".into(), &[], &[])?;
 
     let vertex_input_binding_descriptions = [VertexInputBindingDescription::builder()
         .binding(0)
@@ -261,10 +244,6 @@ fn main() -> VkResult<()> {
     let vertex_input_state_create_info = PipelineVertexInputStateCreateInfo::builder()
         .vertex_attribute_descriptions(&vertex_input_attribute_descriptions)
         .vertex_binding_descriptions(&vertex_input_binding_descriptions)
-        .build();
-
-    let vertex_input_assembly_state_create_info = PipelineInputAssemblyStateCreateInfo::builder()
-        .topology(PrimitiveTopology::POINT_LIST)
         .build();
 
     let scissors = [presentation.rect2d()];
@@ -326,19 +305,15 @@ fn main() -> VkResult<()> {
         .samples(presentation.image.create_info.samples)
         .load_op(AttachmentLoadOp::LOAD)
         .store_op(AttachmentStoreOp::STORE)
+        .stencil_load_op(AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(AttachmentStoreOp::STORE)
+        .initial_layout(ImageLayout::GENERAL)
         .final_layout(ImageLayout::GENERAL)
         .build()];
     let color_attachment_refs = [AttachmentReference::builder()
         .attachment(0)
         .layout(ImageLayout::GENERAL)
         .build()];
-
-    //let dependencies = [SubpassDependency::builder()
-    //    .src_subpass(vk::SUBPASS_EXTERNAL)
-    //    .src_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-    //    .dst_access_mask(AccessFlags::COLOR_ATTACHMENT_READ | AccessFlags::COLOR_ATTACHMENT_WRITE)
-    //    .dst_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-    //    .build()];
 
     let renderpass_subpasses = [SubpassDescription::builder()
         .color_attachments(&color_attachment_refs)
@@ -353,27 +328,71 @@ fn main() -> VkResult<()> {
     let render_pass =
         UsamiDevice::create_render_pass(&device, "render_pass".into(), render_pass_create_info)?;
 
-    let graphics_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
-        .stages(&shader_stage_create_infos)
+    let stream_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
+        .stages(&[
+            PipelineShaderStageCreateInfo::builder()
+                .module(vertex_shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::VERTEX)
+                .build(),
+            PipelineShaderStageCreateInfo::builder()
+                .module(geom_shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::GEOMETRY)
+                .build(),
+        ])
         .vertex_input_state(&vertex_input_state_create_info)
-        .input_assembly_state(&vertex_input_assembly_state_create_info)
+        .input_assembly_state(
+            &PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(PrimitiveTopology::POINT_LIST)
+                .build(),
+        )
         .viewport_state(&viewport_state_create_info)
         .rasterization_state(&rasterization_create_info)
         .multisample_state(&multisample_state_create_info)
         .depth_stencil_state(&depth_state_create_info)
         .color_blend_state(&color_blend_create_state)
-        .layout(pipeline_layout.handle)
+        .layout(stream_pipeline_layout.handle)
+        .render_pass(render_pass.handle)
+        .build();
+
+    let basic_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
+        .stages(&[
+            PipelineShaderStageCreateInfo::builder()
+                .module(vertex_shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::VERTEX)
+                .build(),
+            PipelineShaderStageCreateInfo::builder()
+                .module(frag_shader.handle)
+                .name(shader_entrypoint_name.as_c_str())
+                .stage(ShaderStageFlags::FRAGMENT)
+                .build(),
+        ])
+        .vertex_input_state(&vertex_input_state_create_info)
+        .input_assembly_state(
+            &PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(PrimitiveTopology::TRIANGLE_LIST)
+                .build(),
+        )
+        .viewport_state(&viewport_state_create_info)
+        .rasterization_state(&rasterization_create_info)
+        .multisample_state(&multisample_state_create_info)
+        .depth_stencil_state(&depth_state_create_info)
+        .color_blend_state(&color_blend_create_state)
+        .layout(basic_pipeline_layout.handle)
         .render_pass(render_pass.handle)
         .build();
 
     let pipelines = UsamiDevice::create_graphics_pipelines(
         &device,
-        "pipeline".into(),
+        "stream_pipeline".into(),
         PipelineCache::null(),
-        &[graphics_pipeline_create_info],
+        &[stream_pipeline_create_info, basic_pipeline_create_info],
     )?;
 
-    let graphic_pipeline = &pipelines[0];
+    let stream_pipeline = &pipelines[0];
+    let basic_pipeline = &pipelines[1];
 
     let framebuffer =
         presentation.create_framebuffer(&device, "framebuffer".into(), &render_pass)?;
@@ -463,7 +482,7 @@ fn main() -> VkResult<()> {
                 vk_device.cmd_bind_pipeline(
                     command_buffer.handle,
                     vk::PipelineBindPoint::GRAPHICS,
-                    graphic_pipeline.handle,
+                    basic_pipeline.handle,
                 );
 
                 vk_device.cmd_begin_query(
@@ -514,7 +533,7 @@ fn main() -> VkResult<()> {
                 vk_device.cmd_bind_pipeline(
                     command_buffer.handle,
                     vk::PipelineBindPoint::GRAPHICS,
-                    graphic_pipeline.handle,
+                    stream_pipeline.handle,
                 );
 
                 let mut conditional_rendering_info = ConditionalRenderingBeginInfoEXT::builder()
@@ -534,7 +553,7 @@ fn main() -> VkResult<()> {
                     );
                     vk_device.cmd_push_constants(
                         command_buffer.handle,
-                        pipeline_layout.handle,
+                        stream_pipeline_layout.handle,
                         ShaderStageFlags::GEOMETRY,
                         0,
                         &xfb_stream.to_le_bytes(),

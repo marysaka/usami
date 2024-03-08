@@ -7,17 +7,7 @@ use ash::{
     extensions::ext::{MeshShader, ShaderObject},
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-        ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
-        FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, ObjectType, PhysicalDevice,
-        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures,
-        PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
-        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT,
-        PhysicalDeviceTransformFeedbackFeaturesEXT, QueueFamilyProperties, Rect2D,
-        SampleCountFlags, SharingMode, Viewport,
+        self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures, PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT, PhysicalDeviceVulkan12Features, QueueFamilyProperties, Rect2D, SampleCountFlags, SharingMode, Viewport
     },
 };
 
@@ -138,12 +128,22 @@ impl UsamiDevice {
 
         let mut xfb_features = PhysicalDeviceTransformFeedbackFeaturesEXT::builder()
             .transform_feedback(true)
+            .geometry_streams(true)
             .build();
 
         let mut create_info_builder = DeviceCreateInfo::builder()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
             .enabled_extension_names(&extensions_raw);
+
+        let mut vk12_features = PhysicalDeviceVulkan12Features::builder()
+            .host_query_reset(true)
+            .build();
+
+
+        let mut maintenance4_features = PhysicalDeviceMaintenance4Features::builder()
+            .maintenance4(true)
+            .build();
 
         if has_shader_object_extension {
             create_info_builder = create_info_builder.push_next(&mut shader_object_features);
@@ -161,6 +161,14 @@ impl UsamiDevice {
         if has_xfb_extension {
             create_info_builder = create_info_builder.push_next(&mut xfb_features);
         }
+
+        if instance.vk_version >= vk::API_VERSION_1_2 {
+            create_info_builder = create_info_builder.push_next(&mut vk12_features);
+        }
+
+        if instance.vk_version >= vk::API_VERSION_1_3 {
+            create_info_builder = create_info_builder.push_next(&mut maintenance4_features);
+        }        
 
         let create_info = create_info_builder.build();
 

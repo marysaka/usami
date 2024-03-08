@@ -228,6 +228,8 @@ impl UsamiCommandBuffer {
                 },
                 &[ImageSubresourceRange::builder()
                     .aspect_mask(ImageAspectFlags::COLOR)
+                    .layer_count(image.create_info.array_layers)
+                    .level_count(image.create_info.mip_levels)
                     .build()],
             );
         }
