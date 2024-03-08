@@ -4,10 +4,10 @@ use ash::{
     prelude::*,
     vk::{
         self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, ClearColorValue, CommandBuffer,
-        CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel,
-        CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo, DependencyFlags, Handle,
-        ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, MemoryBarrier,
-        ObjectType, PipelineStageFlags,
+        CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferInheritanceInfo,
+        CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo,
+        DependencyFlags, Handle, ImageAspectFlags, ImageLayout, ImageMemoryBarrier,
+        ImageSubresourceRange, MemoryBarrier, ObjectType, PipelineStageFlags,
     },
 };
 
@@ -89,10 +89,24 @@ impl UsamiCommandBuffer {
         flags: CommandBufferUsageFlags,
         callback: F,
     ) -> VkResult<()> {
+        self.record_with_inheritance_info(&CommandBufferInheritanceInfo::default(), flags, callback)
+    }
+
+    pub fn record_with_inheritance_info<
+        F: Fn(&Arc<UsamiDevice>, &UsamiCommandBuffer) -> VkResult<()>,
+    >(
+        &self,
+        inheritance_info: &CommandBufferInheritanceInfo,
+        flags: CommandBufferUsageFlags,
+        callback: F,
+    ) -> VkResult<()> {
         unsafe {
             self.device.handle.begin_command_buffer(
                 self.handle,
-                &CommandBufferBeginInfo::builder().flags(flags).build(),
+                &CommandBufferBeginInfo::builder()
+                    .inheritance_info(&inheritance_info)
+                    .flags(flags)
+                    .build(),
             )?;
 
             callback(&self.device, self)?;

@@ -447,6 +447,10 @@ fn main() -> VkResult<()> {
         &[0.0f32; XFB_ENTRY_COUNT * XFB_STREAM_COUNT],
     )?;
 
+    let record_draw = |device: &ash::Device, index: u32| unsafe {
+        device.cmd_draw(command_buffer.handle, 6, 1, 6 * index, 0);
+    };
+
     command_buffer.record(
         CommandBufferUsageFlags::empty(),
         |device, command_buffer| {
@@ -454,6 +458,8 @@ fn main() -> VkResult<()> {
 
             let vk_device = &device.handle;
             unsafe {
+                vk_device.cmd_reset_query_pool(command_buffer.handle, query_pool_handle, 0, 2);
+
                 let clear_values = [ClearValue {
                     color: ClearColorValue {
                         float32: [0.0, 0.0, 0.0, 0.0],
@@ -465,8 +471,6 @@ fn main() -> VkResult<()> {
                     .framebuffer(framebuffer.handle)
                     .render_area(presentation.rect2d())
                     .clear_values(&clear_values);
-
-                vk_device.reset_query_pool(query_pool_handle, 0, 2);
 
                 vk_device.cmd_begin_render_pass(
                     command_buffer.handle,
@@ -491,7 +495,7 @@ fn main() -> VkResult<()> {
                     0,
                     QueryControlFlags::empty(),
                 );
-                vk_device.cmd_draw(command_buffer.handle, 6, 1, 2, 0);
+                record_draw(vk_device, 2);
                 vk_device.cmd_end_query(command_buffer.handle, query_pool_handle, 0);
 
                 vk_device.cmd_begin_query(
@@ -500,7 +504,7 @@ fn main() -> VkResult<()> {
                     1,
                     QueryControlFlags::empty(),
                 );
-                vk_device.cmd_draw(command_buffer.handle, 6, 1, 1, 0);
+                record_draw(vk_device, 1);
                 vk_device.cmd_end_query(command_buffer.handle, query_pool_handle, 1);
 
                 vk_device.cmd_end_render_pass(command_buffer.handle);
@@ -566,7 +570,7 @@ fn main() -> VkResult<()> {
                         &conditional_rendering_info,
                     );
                     xfb.begin_transform_feedback(command_buffer.handle, 0, &[], &[]);
-                    vk_device.cmd_draw(command_buffer.handle, 6, 1, 1, 0);
+                    record_draw(vk_device, 1);
                     xfb.end_transform_feedback(command_buffer.handle, 0, &[], &[]);
                     cond_render.end_conditional_rendering(command_buffer.handle);
                 }
