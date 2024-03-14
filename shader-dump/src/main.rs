@@ -1,5 +1,5 @@
 use ash::{
-    extensions::ext::{MeshShader, ShaderObject},
+    extensions::{ext::{MeshShader, ShaderObject}, khr::CooperativeMatrix},
     prelude::VkResult,
     vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
 };
@@ -36,6 +36,7 @@ fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult
         &[
             ShaderObject::NAME.to_string_lossy().into(),
             MeshShader::NAME.to_string_lossy().into(),
+            CooperativeMatrix::NAME.to_string_lossy().into(),
         ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
