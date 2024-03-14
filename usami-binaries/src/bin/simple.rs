@@ -38,10 +38,9 @@ fn main() -> VkResult<()> {
     let command_pool = UsamiDevice::create_command_pool(
         &device,
         "command_pool".into(),
-        CommandPoolCreateInfo::builder()
+        CommandPoolCreateInfo::default()
             .queue_family_index(device.vk_queue_index)
-            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .build(),
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
     )?;
 
     let command_buffers = command_pool.allocate_command_buffers(
@@ -55,13 +54,12 @@ fn main() -> VkResult<()> {
         &presentation.image,
         &presentation.buffer_readback,
         |device, command_buffer, image| {
-            let image_subresource_range = ImageSubresourceRange::builder()
+            let image_subresource_range = ImageSubresourceRange::default()
                 .base_array_layer(0)
-                .layer_count(image.create_info.array_layers)
+                .layer_count(image.array_layers)
                 .base_mip_level(0)
-                .level_count(image.create_info.mip_levels)
-                .aspect_mask(ImageAspectFlags::COLOR)
-                .build();
+                .level_count(image.mip_levels)
+                .aspect_mask(ImageAspectFlags::COLOR);
 
             unsafe {
                 device.handle.cmd_pipeline_barrier(
@@ -71,7 +69,7 @@ fn main() -> VkResult<()> {
                     DependencyFlags::empty(),
                     &[],
                     &[],
-                    &[ImageMemoryBarrier::builder()
+                    &[ImageMemoryBarrier::default()
                         .src_access_mask(AccessFlags::MEMORY_READ)
                         .dst_access_mask(AccessFlags::TRANSFER_WRITE)
                         .old_layout(ImageLayout::UNDEFINED)
@@ -79,8 +77,7 @@ fn main() -> VkResult<()> {
                         .src_queue_family_index(device.vk_queue_index)
                         .dst_queue_family_index(device.vk_queue_index)
                         .image(image.handle)
-                        .subresource_range(image_subresource_range)
-                        .build()],
+                        .subresource_range(image_subresource_range)],
                 );
 
                 let mut clear_color_value = ClearColorValue::default();
@@ -103,9 +100,7 @@ fn main() -> VkResult<()> {
     let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
     queue.submit(
-        &[SubmitInfo::builder()
-            .command_buffers(&[command_buffers[0].handle])
-            .build()],
+        &[SubmitInfo::default().command_buffers(&[command_buffers[0].handle])],
         &fence,
     )?;
     fence.wait(u64::MAX)?;

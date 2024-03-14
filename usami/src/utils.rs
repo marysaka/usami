@@ -137,20 +137,18 @@ pub fn record_command_buffer_with_image_dep<
             command_buffer.copy_image_to_buffer(
                 image,
                 buffer,
-                &[BufferImageCopy::builder()
+                &[BufferImageCopy::default()
                     .image_subresource(
-                        ImageSubresourceLayers::builder()
+                        ImageSubresourceLayers::default()
                             .aspect_mask(ImageAspectFlags::COLOR)
                             .mip_level(0)
-                            .layer_count(1)
-                            .build(),
+                            .layer_count(1),
                     )
                     .image_extent(Extent3D {
-                        width: image.create_info.extent.width,
-                        height: image.create_info.extent.height,
+                        width: image.extent.width,
+                        height: image.extent.height,
                         depth: 1,
-                    })
-                    .build()],
+                    })],
                 AccessFlags::COLOR_ATTACHMENT_WRITE,
                 old_image_layout,
                 1,
@@ -191,9 +189,7 @@ pub fn record_and_execute_command_buffer<
     let queue = UsamiDevice::get_device_queue(device, "queue".into(), device.vk_queue_index, 0)?;
 
     queue.submit(
-        &[SubmitInfo::builder()
-            .command_buffers(&[command_buffer.handle])
-            .build()],
+        &[SubmitInfo::default().command_buffers(&[command_buffer.handle])],
         &fence,
     )?;
     fence.wait(u64::MAX)?;

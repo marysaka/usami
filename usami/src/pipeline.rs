@@ -3,8 +3,7 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        ComputePipelineCreateInfo, DescriptorSetLayout, GraphicsPipelineCreateInfo, Handle,
-        ObjectType, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
+        ComputePipelineCreateInfo, DescriptorSetLayout, GraphicsPipelineCreateInfo, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
         PipelineLayoutCreateInfo, PushConstantRange,
     },
 };
@@ -22,11 +21,10 @@ impl UsamiPipelineLayout {
         set_layouts: &[DescriptorSetLayout],
         push_constant_ranges: &[PushConstantRange],
     ) -> VkResult<Self> {
-        let create_info = PipelineLayoutCreateInfo::builder()
+        let create_info = PipelineLayoutCreateInfo::default()
             .set_layouts(set_layouts)
             .push_constant_ranges(push_constant_ranges)
-            .flags(PipelineLayoutCreateFlags::empty())
-            .build();
+            .flags(PipelineLayoutCreateFlags::empty());
 
         let handle = unsafe { device.handle.create_pipeline_layout(&create_info, None)? };
 
@@ -111,11 +109,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiPipelineLayout> {
         let pipeline_layout = UsamiPipelineLayout::new(device, set_layouts, push_constant_ranges)?;
 
-        device.set_debug_name(
-            name,
-            pipeline_layout.handle.as_raw(),
-            ObjectType::PIPELINE_LAYOUT,
-        )?;
+        device.set_debug_name(name, pipeline_layout.handle)?;
 
         Ok(pipeline_layout)
     }
@@ -129,11 +123,7 @@ impl UsamiDevice {
         let pipelines = UsamiPipeline::new_compute(device, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
-            device.set_debug_name(
-                format!("{name}_{idx}"),
-                pipeline.handle.as_raw(),
-                ObjectType::PIPELINE,
-            )?;
+            device.set_debug_name(format!("{name}_{idx}"), pipeline.handle)?;
         }
 
         Ok(pipelines)
@@ -148,11 +138,7 @@ impl UsamiDevice {
         let pipelines = UsamiPipeline::new_graphics(device, pipeline_cache, create_infos)?;
 
         for (idx, pipeline) in pipelines.iter().enumerate() {
-            device.set_debug_name(
-                format!("{name}_{idx}"),
-                pipeline.handle.as_raw(),
-                ObjectType::PIPELINE,
-            )?;
+            device.set_debug_name(format!("{name}_{idx}"), pipeline.handle)?;
         }
 
         Ok(pipelines)

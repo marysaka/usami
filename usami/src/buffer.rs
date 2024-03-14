@@ -3,8 +3,7 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, Handle, MemoryPropertyFlags,
-        ObjectType, SharingMode,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, MemoryPropertyFlags, SharingMode,
     },
     Device,
 };
@@ -13,7 +12,6 @@ use crate::{UsamiDevice, UsamiDeviceMemory};
 
 pub struct UsamiBuffer {
     device: Arc<UsamiDevice>,
-    pub create_info: BufferCreateInfo,
     pub handle: Buffer,
     pub device_memory: UsamiDeviceMemory,
 }
@@ -35,7 +33,6 @@ impl UsamiBuffer {
 
         Ok(Self {
             device: device.clone(),
-            create_info,
             handle,
             device_memory,
         })
@@ -98,16 +95,16 @@ impl UsamiDevice {
         size: u64,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<UsamiBuffer> {
-        let create_info = BufferCreateInfo::builder()
+        let queue_family_indices = &[device.vk_queue_index];
+        let create_info = BufferCreateInfo::default()
             .flags(flags)
             .sharing_mode(sharing_mode)
             .usage(usage)
             .size(size)
-            .queue_family_indices(&[device.vk_queue_index])
-            .build();
+            .queue_family_indices(queue_family_indices);
         let buffer = UsamiBuffer::new(device, create_info, memory_flags)?;
 
-        device.set_debug_name(name, buffer.handle.as_raw(), ObjectType::BUFFER)?;
+        device.set_debug_name(name, buffer.handle)?;
 
         Ok(buffer)
     }

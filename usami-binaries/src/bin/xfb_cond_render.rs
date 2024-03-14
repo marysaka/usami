@@ -73,9 +73,8 @@ fn main() -> VkResult<()> {
         }),
     )?;
 
-    let xfb = TransformFeedback::new(&device.instance.vk_entry, &device.instance.vk_instance);
-    let cond_render =
-        ConditionalRendering::new(&device.instance.vk_entry, &device.instance.vk_instance);
+    let xfb = TransformFeedback::new(&device.instance.vk_instance, &device.handle);
+    let cond_render = ConditionalRendering::new(&device.instance.vk_instance, &device.handle);
     let presentation = UsamiPresentation::new(&device, width, height)?;
     let rgba_blue = [0.0, 0.0, 1.0, 1.0];
     let rgba_black = [0.0, 0.0, 0.0, 1.0];
@@ -204,87 +203,76 @@ fn main() -> VkResult<()> {
         &device,
         "stream_pipeline_layout".into(),
         &[],
-        &[PushConstantRange::builder()
+        &[PushConstantRange::default()
             .stage_flags(ShaderStageFlags::GEOMETRY)
             .offset(0)
-            .size(std::mem::size_of::<u32>() as u32)
-            .build()],
+            .size(std::mem::size_of::<u32>() as u32)],
     )?;
 
     let basic_pipeline_layout =
         UsamiDevice::create_pipeline_layout(&device, "basic_pipeline_layout".into(), &[], &[])?;
 
-    let vertex_input_binding_descriptions = [VertexInputBindingDescription::builder()
+    let vertex_input_binding_descriptions = [VertexInputBindingDescription::default()
         .binding(0)
         .stride(std::mem::size_of::<VertexElementData>() as u32)
-        .input_rate(VertexInputRate::VERTEX)
-        .build()];
+        .input_rate(VertexInputRate::VERTEX)];
 
     let vertex_input_attribute_descriptions = [
-        VertexInputAttributeDescription::builder()
+        VertexInputAttributeDescription::default()
             .location(0)
             .binding(0)
             .offset(offset_of!(VertexElementData, pos) as u32)
-            .format(Format::R32G32B32A32_SFLOAT)
-            .build(),
-        VertexInputAttributeDescription::builder()
+            .format(Format::R32G32B32A32_SFLOAT),
+        VertexInputAttributeDescription::default()
             .location(1)
             .binding(0)
             .offset(offset_of!(VertexElementData, color) as u32)
-            .format(Format::R32G32B32A32_SFLOAT)
-            .build(),
-        VertexInputAttributeDescription::builder()
+            .format(Format::R32G32B32A32_SFLOAT),
+        VertexInputAttributeDescription::default()
             .location(3)
             .binding(0)
             .offset(offset_of!(VertexElementData, vertex_index) as u32)
-            .format(Format::R32_SINT)
-            .build(),
+            .format(Format::R32_SINT),
     ];
 
-    let vertex_input_state_create_info = PipelineVertexInputStateCreateInfo::builder()
+    let vertex_input_state_create_info = PipelineVertexInputStateCreateInfo::default()
         .vertex_attribute_descriptions(&vertex_input_attribute_descriptions)
-        .vertex_binding_descriptions(&vertex_input_binding_descriptions)
-        .build();
+        .vertex_binding_descriptions(&vertex_input_binding_descriptions);
 
     let scissors = [presentation.rect2d()];
     let viewports = [presentation.viewport()];
 
-    let viewport_state_create_info = PipelineViewportStateCreateInfo::builder()
+    let viewport_state_create_info = PipelineViewportStateCreateInfo::default()
         .scissors(&scissors)
-        .viewports(&viewports)
-        .build();
+        .viewports(&viewports);
 
-    let rasterization_create_info = PipelineRasterizationStateCreateInfo::builder()
+    let rasterization_create_info = PipelineRasterizationStateCreateInfo::default()
         .front_face(FrontFace::COUNTER_CLOCKWISE)
         .polygon_mode(PolygonMode::FILL)
-        .line_width(1.0)
-        .build();
+        .line_width(1.0);
 
-    let multisample_state_create_info = PipelineMultisampleStateCreateInfo::builder()
-        .rasterization_samples(SampleCountFlags::TYPE_1)
-        .build();
+    let multisample_state_create_info = PipelineMultisampleStateCreateInfo::default()
+        .rasterization_samples(SampleCountFlags::TYPE_1);
 
-    let noop_stencil = StencilOpState::builder()
+    let noop_stencil = StencilOpState::default()
         .fail_op(StencilOp::REPLACE)
         .pass_op(StencilOp::REPLACE)
         .depth_fail_op(StencilOp::REPLACE)
         .compare_op(CompareOp::ALWAYS)
         .compare_mask(u32::MAX)
         .write_mask(u32::MAX)
-        .reference(0)
-        .build();
+        .reference(0);
 
-    let depth_state_create_info = PipelineDepthStencilStateCreateInfo::builder()
+    let depth_state_create_info = PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(false)
         .depth_write_enable(false)
         .depth_compare_op(CompareOp::ALWAYS)
         .front(noop_stencil)
         .back(noop_stencil)
         .min_depth_bounds(0.0)
-        .max_depth_bounds(1.0)
-        .build();
+        .max_depth_bounds(1.0);
 
-    let attachements = [PipelineColorBlendAttachmentState::builder()
+    let attachements = [PipelineColorBlendAttachmentState::default()
         .blend_enable(false)
         .src_color_blend_factor(BlendFactor::SRC_COLOR)
         .dst_color_blend_factor(BlendFactor::DST_COLOR)
@@ -292,97 +280,85 @@ fn main() -> VkResult<()> {
         .src_alpha_blend_factor(BlendFactor::SRC_COLOR)
         .dst_alpha_blend_factor(BlendFactor::DST_COLOR)
         .alpha_blend_op(BlendOp::ADD)
-        .color_write_mask(ColorComponentFlags::RGBA)
-        .build()];
+        .color_write_mask(ColorComponentFlags::RGBA)];
 
-    let color_blend_create_state = PipelineColorBlendStateCreateInfo::builder()
+    let color_blend_create_state = PipelineColorBlendStateCreateInfo::default()
         .logic_op(LogicOp::COPY)
-        .attachments(&attachements)
-        .build();
+        .attachments(&attachements);
 
-    let renderpass_attachments = [AttachmentDescription::builder()
-        .format(presentation.image.create_info.format)
-        .samples(presentation.image.create_info.samples)
+    let renderpass_attachments: [AttachmentDescription; 1] = [AttachmentDescription::default()
+        .format(presentation.image.format)
+        .samples(presentation.image.samples)
         .load_op(AttachmentLoadOp::LOAD)
         .store_op(AttachmentStoreOp::STORE)
         .stencil_load_op(AttachmentLoadOp::DONT_CARE)
         .stencil_store_op(AttachmentStoreOp::STORE)
         .initial_layout(ImageLayout::GENERAL)
-        .final_layout(ImageLayout::GENERAL)
-        .build()];
-    let color_attachment_refs = [AttachmentReference::builder()
+        .final_layout(ImageLayout::GENERAL)];
+    let color_attachment_refs = [AttachmentReference::default()
         .attachment(0)
-        .layout(ImageLayout::GENERAL)
-        .build()];
+        .layout(ImageLayout::GENERAL)];
 
-    let renderpass_subpasses = [SubpassDescription::builder()
+    let renderpass_subpasses = [SubpassDescription::default()
         .color_attachments(&color_attachment_refs)
-        .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
-        .build()];
+        .pipeline_bind_point(PipelineBindPoint::GRAPHICS)];
 
-    let render_pass_create_info = RenderPassCreateInfo::builder()
+    let render_pass_create_info = RenderPassCreateInfo::default()
         .attachments(&renderpass_attachments)
-        .subpasses(&renderpass_subpasses)
-        .build();
+        .subpasses(&renderpass_subpasses);
 
     let render_pass =
         UsamiDevice::create_render_pass(&device, "render_pass".into(), render_pass_create_info)?;
 
-    let stream_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
-        .stages(&[
-            PipelineShaderStageCreateInfo::builder()
-                .module(vertex_shader.handle)
-                .name(shader_entrypoint_name.as_c_str())
-                .stage(ShaderStageFlags::VERTEX)
-                .build(),
-            PipelineShaderStageCreateInfo::builder()
-                .module(geom_shader.handle)
-                .name(shader_entrypoint_name.as_c_str())
-                .stage(ShaderStageFlags::GEOMETRY)
-                .build(),
-        ])
+    let stream_stages = [
+        PipelineShaderStageCreateInfo::default()
+            .module(vertex_shader.handle)
+            .name(shader_entrypoint_name.as_c_str())
+            .stage(ShaderStageFlags::VERTEX),
+        PipelineShaderStageCreateInfo::default()
+            .module(geom_shader.handle)
+            .name(shader_entrypoint_name.as_c_str())
+            .stage(ShaderStageFlags::GEOMETRY),
+    ];
+
+    let stream_input_assembly_state =
+        PipelineInputAssemblyStateCreateInfo::default().topology(PrimitiveTopology::POINT_LIST);
+
+    let stream_pipeline_create_info = GraphicsPipelineCreateInfo::default()
+        .stages(&stream_stages)
         .vertex_input_state(&vertex_input_state_create_info)
-        .input_assembly_state(
-            &PipelineInputAssemblyStateCreateInfo::builder()
-                .topology(PrimitiveTopology::POINT_LIST)
-                .build(),
-        )
+        .input_assembly_state(&stream_input_assembly_state)
         .viewport_state(&viewport_state_create_info)
         .rasterization_state(&rasterization_create_info)
         .multisample_state(&multisample_state_create_info)
         .depth_stencil_state(&depth_state_create_info)
         .color_blend_state(&color_blend_create_state)
         .layout(stream_pipeline_layout.handle)
-        .render_pass(render_pass.handle)
-        .build();
+        .render_pass(render_pass.handle);
 
-    let basic_pipeline_create_info = GraphicsPipelineCreateInfo::builder()
-        .stages(&[
-            PipelineShaderStageCreateInfo::builder()
-                .module(vertex_shader.handle)
-                .name(shader_entrypoint_name.as_c_str())
-                .stage(ShaderStageFlags::VERTEX)
-                .build(),
-            PipelineShaderStageCreateInfo::builder()
-                .module(frag_shader.handle)
-                .name(shader_entrypoint_name.as_c_str())
-                .stage(ShaderStageFlags::FRAGMENT)
-                .build(),
-        ])
+    let basic_stages = [
+        PipelineShaderStageCreateInfo::default()
+            .module(vertex_shader.handle)
+            .name(shader_entrypoint_name.as_c_str())
+            .stage(ShaderStageFlags::VERTEX),
+        PipelineShaderStageCreateInfo::default()
+            .module(frag_shader.handle)
+            .name(shader_entrypoint_name.as_c_str())
+            .stage(ShaderStageFlags::FRAGMENT),
+    ];
+    let basic_input_assembly_state =
+        PipelineInputAssemblyStateCreateInfo::default().topology(PrimitiveTopology::TRIANGLE_LIST);
+    let basic_pipeline_create_info = GraphicsPipelineCreateInfo::default()
+        .stages(&basic_stages)
         .vertex_input_state(&vertex_input_state_create_info)
-        .input_assembly_state(
-            &PipelineInputAssemblyStateCreateInfo::builder()
-                .topology(PrimitiveTopology::TRIANGLE_LIST)
-                .build(),
-        )
+        .input_assembly_state(&basic_input_assembly_state)
         .viewport_state(&viewport_state_create_info)
         .rasterization_state(&rasterization_create_info)
         .multisample_state(&multisample_state_create_info)
         .depth_stencil_state(&depth_state_create_info)
         .color_blend_state(&color_blend_create_state)
         .layout(basic_pipeline_layout.handle)
-        .render_pass(render_pass.handle)
-        .build();
+        .render_pass(render_pass.handle);
 
     let pipelines = UsamiDevice::create_graphics_pipelines(
         &device,
@@ -400,10 +376,9 @@ fn main() -> VkResult<()> {
     let command_pool = UsamiDevice::create_command_pool(
         &device,
         "command_pool".into(),
-        CommandPoolCreateInfo::builder()
+        CommandPoolCreateInfo::default()
             .queue_family_index(device.vk_queue_index)
-            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .build(),
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
     )?;
 
     let command_buffers = command_pool.allocate_command_buffers(
@@ -420,10 +395,9 @@ fn main() -> VkResult<()> {
 
     let query_pool_handle = unsafe {
         device.handle.create_query_pool(
-            &QueryPoolCreateInfo::builder()
+            &QueryPoolCreateInfo::default()
                 .query_type(QueryType::OCCLUSION)
-                .query_count(2)
-                .build(),
+                .query_count(2),
             None,
         )
     }?;
@@ -466,7 +440,7 @@ fn main() -> VkResult<()> {
                     },
                 }];
 
-                let render_pass_begin_info = RenderPassBeginInfo::builder()
+                let render_pass_begin_info = RenderPassBeginInfo::default()
                     .render_pass(render_pass.handle)
                     .framebuffer(framebuffer.handle)
                     .render_area(presentation.rect2d())
@@ -540,10 +514,9 @@ fn main() -> VkResult<()> {
                     stream_pipeline.handle,
                 );
 
-                let mut conditional_rendering_info = ConditionalRenderingBeginInfoEXT::builder()
+                let mut conditional_rendering_info = ConditionalRenderingBeginInfoEXT::default()
                     .buffer(query_buffer.handle)
-                    .offset(std::mem::size_of::<u32>() as vk::DeviceSize)
-                    .build();
+                    .offset(std::mem::size_of::<u32>() as vk::DeviceSize);
 
                 for xfb_stream in 0u32..XFB_STREAM_COUNT as u32 {
                     let xfb_offset = xfb_stream * XFB_RAW_SIZE as u32;
@@ -593,9 +566,7 @@ fn main() -> VkResult<()> {
     let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
     queue.submit(
-        &[SubmitInfo::builder()
-            .command_buffers(&[command_buffer.handle])
-            .build()],
+        &[SubmitInfo::default().command_buffers(&[command_buffer.handle])],
         &fence,
     )?;
     fence.wait(u64::MAX)?;

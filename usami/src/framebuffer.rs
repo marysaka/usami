@@ -2,14 +2,13 @@ use std::sync::Arc;
 
 use ash::{
     prelude::*,
-    vk::{Framebuffer, FramebufferCreateInfo, Handle, ObjectType},
+    vk::{Framebuffer, FramebufferCreateInfo},
 };
 
 use crate::UsamiDevice;
 
 pub struct UsamiFramebuffer {
     device: Arc<UsamiDevice>,
-    pub create_info: FramebufferCreateInfo,
     pub handle: Framebuffer,
 }
 
@@ -19,7 +18,6 @@ impl UsamiFramebuffer {
 
         Ok(Self {
             device: device.clone(),
-            create_info,
             handle,
         })
     }
@@ -39,7 +37,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiFramebuffer> {
         let framebuffer = UsamiFramebuffer::new(device, create_info)?;
 
-        device.set_debug_name(name, framebuffer.handle.as_raw(), ObjectType::FRAMEBUFFER)?;
+        device.set_debug_name(name, framebuffer.handle)?;
 
         Ok(framebuffer)
     }

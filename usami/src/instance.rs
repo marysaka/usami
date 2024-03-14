@@ -59,7 +59,7 @@ impl UsamiInstance {
     ) -> VkResult<Self> {
         let app_name = CString::new(app_name).expect("cannot create CString for application name");
         let engine_name = CString::new(engine_name).expect("cannot create CString for engine name");
-        let application_info = vk::ApplicationInfo::builder()
+        let application_info = vk::ApplicationInfo::default()
             .application_name(app_name.as_c_str())
             .application_version(0)
             .engine_name(engine_name.as_c_str())
@@ -78,19 +78,18 @@ impl UsamiInstance {
         let validation_layer = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
         let validation_layers_slice = &[validation_layer.as_ptr()];
 
-        let mut create_info_builder = vk::InstanceCreateInfo::builder()
+        let mut create_info = vk::InstanceCreateInfo::default()
             .application_info(&application_info)
             .enabled_extension_names(&extensions_raw);
 
         if enable_validation {
-            create_info_builder = create_info_builder.enabled_layer_names(validation_layers_slice);
+            create_info = create_info.enabled_layer_names(validation_layers_slice);
         }
-        let create_info = create_info_builder.build();
 
         let vk_entry = unsafe { Entry::load().expect("Cannot load VK library") };
         let vk_instance = unsafe { vk_entry.create_instance(&create_info, None)? };
 
-        let vk_debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        let vk_debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
                     | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -101,8 +100,7 @@ impl UsamiInstance {
                     | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
             )
-            .pfn_user_callback(Some(vulkan_debug_callback))
-            .build();
+            .pfn_user_callback(Some(vulkan_debug_callback));
 
         let vk_debug_utils_loader = DebugUtils::new(&vk_entry, &vk_instance);
         let vk_messenger =

@@ -13,7 +13,7 @@ use crate::UsamiDevice;
 pub struct UsamiDeviceMemory {
     device: Arc<UsamiDevice>,
     pub requirements: MemoryRequirements,
-    pub allocate_info: MemoryAllocateInfo,
+    pub allocation_size: u64,
     pub handle: DeviceMemory,
 }
 
@@ -23,17 +23,16 @@ impl UsamiDeviceMemory {
         requirements: MemoryRequirements,
         flags: MemoryPropertyFlags,
     ) -> VkResult<Self> {
-        let allocate_info = MemoryAllocateInfo::builder()
+        let allocate_info = MemoryAllocateInfo::default()
             .allocation_size(requirements.size)
-            .memory_type_index(device.find_memory_type(&requirements, flags)?)
-            .build();
+            .memory_type_index(device.find_memory_type(&requirements, flags)?);
 
         let handle = unsafe { device.handle.allocate_memory(&allocate_info, None)? };
 
         Ok(Self {
             device: device.clone(),
             requirements,
-            allocate_info,
+            allocation_size: allocate_info.allocation_size,
             handle,
         })
     }
@@ -45,7 +44,7 @@ impl UsamiDeviceMemory {
         self.device.handle.map_memory(
             self.handle,
             0,
-            self.allocate_info.allocation_size,
+            self.allocation_size,
             MemoryMapFlags::empty(),
         )
     }
@@ -79,20 +78,19 @@ impl UsamiDeviceMemory {
             }
         };
 
-        assert!(aligned_offset < self.allocate_info.allocation_size);
+        assert!(aligned_offset < self.allocation_size);
 
-        if aligned_size >= (self.allocate_info.allocation_size - aligned_offset) {
+        if aligned_size >= (self.allocation_size - aligned_offset) {
             aligned_size = vk::WHOLE_SIZE;
         }
 
         unsafe {
             self.device
                 .handle
-                .flush_mapped_memory_ranges(&[MappedMemoryRange::builder()
+                .flush_mapped_memory_ranges(&[MappedMemoryRange::default()
                     .memory(self.handle)
                     .offset(aligned_offset)
-                    .size(aligned_size)
-                    .build()])
+                    .size(aligned_size)])
         }
     }
 
@@ -100,18 +98,17 @@ impl UsamiDeviceMemory {
         unsafe {
             self.device
                 .handle
-                .invalidate_mapped_memory_ranges(&[MappedMemoryRange::builder()
+                .invalidate_mapped_memory_ranges(&[MappedMemoryRange::default()
                     .memory(self.handle)
                     .offset(offset)
-                    .size(size)
-                    .build()])
+                    .size(size)])
         }
     }
 
     pub fn read_to_vec(&self) -> VkResult<Vec<u8>> {
         let mut res = Vec::new();
 
-        let allocation_size = self.allocate_info.allocation_size as usize;
+        let allocation_size = self.allocation_size as usize;
 
         res.resize(allocation_size, 0);
 

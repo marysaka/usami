@@ -7,7 +7,18 @@ use ash::{
     extensions::ext::{MeshShader, ShaderObject},
     prelude::*,
     vk::{
-        self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags, ObjectType, PhysicalDevice, PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures, PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT, PhysicalDeviceVulkan12Features, QueueFamilyProperties, Rect2D, SampleCountFlags, SharingMode, Viewport
+        self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
+        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
+        ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
+        FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
+        ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
+        MemoryPropertyFlags, PhysicalDevice,
+        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures,
+        PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties,
+        PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties,
+        PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT,
+        PhysicalDeviceVulkan12Features, QueueFamilyProperties, Rect2D, SampleCountFlags,
+        SharingMode, Viewport,
     },
 };
 
@@ -75,19 +86,19 @@ impl UsamiDevice {
         let mut has_xfb_extension = false;
 
         for extension in &extensions_cstring {
-            if ShaderObject::name() == extension.as_c_str() {
+            if ShaderObject::NAME == extension.as_c_str() {
                 has_shader_object_extension = true;
             }
 
-            if MeshShader::name() == extension.as_c_str() {
+            if MeshShader::NAME == extension.as_c_str() {
                 has_mesh_shader_extension = true;
             }
 
-            if ExtConditionalRenderingFn::name() == extension.as_c_str() {
+            if ExtConditionalRenderingFn::NAME == extension.as_c_str() {
                 has_conditional_rendering_extension = true;
             }
 
-            if ExtTransformFeedbackFn::name() == extension.as_c_str() {
+            if ExtTransformFeedbackFn::NAME == extension.as_c_str() {
                 has_xfb_extension = true;
             }
         }
@@ -97,80 +108,66 @@ impl UsamiDevice {
             .map(|raw_name| raw_name.as_ptr())
             .collect();
 
-        let enabled_features = PhysicalDeviceFeatures::builder()
+        let enabled_features = PhysicalDeviceFeatures::default()
             .geometry_shader(physical_device.features.geometry_shader != 0)
             .shader_tessellation_and_geometry_point_size(
                 physical_device
                     .features
                     .shader_tessellation_and_geometry_point_size
                     != 0,
-            )
-            .build();
+            );
 
-        let device_queue_create_info = [DeviceQueueCreateInfo::builder()
+        let device_queue_create_info = [DeviceQueueCreateInfo::default()
             .queue_family_index(vk_queue_index)
-            .queue_priorities(&[1.0])
-            .build()];
+            .queue_priorities(&[1.0])];
 
-        let mut shader_object_features = PhysicalDeviceShaderObjectFeaturesEXT::builder()
-            .shader_object(true)
-            .build();
+        let mut shader_object_features =
+            PhysicalDeviceShaderObjectFeaturesEXT::default().shader_object(true);
 
-        let mut mesh_shader_features = PhysicalDeviceMeshShaderFeaturesEXT::builder()
+        let mut mesh_shader_features = PhysicalDeviceMeshShaderFeaturesEXT::default()
             .mesh_shader(true)
-            .task_shader(true)
-            .build();
+            .task_shader(true);
 
         let mut conditional_rendering_features =
-            PhysicalDeviceConditionalRenderingFeaturesEXT::builder()
-                .conditional_rendering(true)
-                .build();
+            PhysicalDeviceConditionalRenderingFeaturesEXT::default().conditional_rendering(true);
 
-        let mut xfb_features = PhysicalDeviceTransformFeedbackFeaturesEXT::builder()
+        let mut xfb_features = PhysicalDeviceTransformFeedbackFeaturesEXT::default()
             .transform_feedback(true)
-            .geometry_streams(true)
-            .build();
+            .geometry_streams(true);
 
-        let mut create_info_builder = DeviceCreateInfo::builder()
+        let mut create_info = DeviceCreateInfo::default()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
             .enabled_extension_names(&extensions_raw);
 
-        let mut vk12_features = PhysicalDeviceVulkan12Features::builder()
-            .host_query_reset(true)
-            .build();
+        let mut vk12_features = PhysicalDeviceVulkan12Features::default().host_query_reset(true);
 
-
-        let mut maintenance4_features = PhysicalDeviceMaintenance4Features::builder()
-            .maintenance4(true)
-            .build();
+        let mut maintenance4_features =
+            PhysicalDeviceMaintenance4Features::default().maintenance4(true);
 
         if has_shader_object_extension {
-            create_info_builder = create_info_builder.push_next(&mut shader_object_features);
+            create_info = create_info.push_next(&mut shader_object_features);
         }
 
         if has_mesh_shader_extension {
-            create_info_builder = create_info_builder.push_next(&mut mesh_shader_features);
+            create_info = create_info.push_next(&mut mesh_shader_features);
         }
 
         if has_conditional_rendering_extension {
-            create_info_builder =
-                create_info_builder.push_next(&mut conditional_rendering_features);
+            create_info = create_info.push_next(&mut conditional_rendering_features);
         }
 
         if has_xfb_extension {
-            create_info_builder = create_info_builder.push_next(&mut xfb_features);
+            create_info = create_info.push_next(&mut xfb_features);
         }
 
         if instance.vk_version >= vk::API_VERSION_1_2 {
-            create_info_builder = create_info_builder.push_next(&mut vk12_features);
+            create_info = create_info.push_next(&mut vk12_features);
         }
 
         if instance.vk_version >= vk::API_VERSION_1_3 {
-            create_info_builder = create_info_builder.push_next(&mut maintenance4_features);
-        }        
-
-        let create_info = create_info_builder.build();
+            create_info = create_info.push_next(&mut maintenance4_features);
+        }
 
         let handle = unsafe {
             instance
@@ -186,12 +183,7 @@ impl UsamiDevice {
         }))
     }
 
-    pub fn set_debug_name(
-        &self,
-        name: String,
-        object_handle: u64,
-        object_type: ObjectType,
-    ) -> VkResult<()> {
+    pub fn set_debug_name<T: vk::Handle>(&self, name: String, object_handle: T) -> VkResult<()> {
         unsafe {
             let name = CString::new(name).unwrap();
 
@@ -199,11 +191,9 @@ impl UsamiDevice {
                 .vk_debug_utils_loader
                 .set_debug_utils_object_name(
                     self.handle.handle(),
-                    &DebugUtilsObjectNameInfoEXT::builder()
+                    &DebugUtilsObjectNameInfoEXT::default()
                         .object_handle(object_handle)
-                        .object_type(object_type)
-                        .object_name(name.as_c_str())
-                        .build(),
+                        .object_name(name.as_c_str()),
                 )
         }
     }
@@ -226,7 +216,7 @@ pub struct UsamiPresentation {
 impl UsamiPresentation {
     pub fn new(device: &Arc<UsamiDevice>, width: u32, height: u32) -> VkResult<Self> {
         let format = Format::R8G8B8A8_UNORM;
-        let presentation_image_info = ImageCreateInfo::builder()
+        let presentation_image_info = ImageCreateInfo::default()
             .image_type(ImageType::TYPE_2D)
             .format(format)
             .extent(Extent3D {
@@ -243,8 +233,7 @@ impl UsamiPresentation {
                     | ImageUsageFlags::SAMPLED
                     | ImageUsageFlags::TRANSFER_DST
                     | ImageUsageFlags::TRANSFER_SRC,
-            )
-            .build();
+            );
 
         let image = UsamiDevice::create_image(
             device,
@@ -256,19 +245,17 @@ impl UsamiPresentation {
         let image_view = image.create_simple_image_view(
             "presentation_image_view".into(),
             ImageViewType::TYPE_2D,
-            ImageSubresourceRange::builder()
+            ImageSubresourceRange::default()
                 .aspect_mask(ImageAspectFlags::COLOR)
                 .base_mip_level(0)
                 .level_count(presentation_image_info.mip_levels)
                 .base_array_layer(0)
-                .layer_count(presentation_image_info.array_layers)
-                .build(),
-            ComponentMapping::builder()
+                .layer_count(presentation_image_info.array_layers),
+            ComponentMapping::default()
                 .r(ComponentSwizzle::IDENTITY)
                 .g(ComponentSwizzle::IDENTITY)
                 .b(ComponentSwizzle::IDENTITY)
-                .a(ComponentSwizzle::IDENTITY)
-                .build(),
+                .a(ComponentSwizzle::IDENTITY),
             ImageViewCreateFlags::empty(),
         )?;
 
@@ -291,13 +278,13 @@ impl UsamiPresentation {
 
     pub fn dimensions(&self) -> Extent2D {
         Extent2D {
-            width: self.image.create_info.extent.width,
-            height: self.image.create_info.extent.height,
+            width: self.image.extent.width,
+            height: self.image.extent.height,
         }
     }
 
     pub fn rect2d(&self) -> Rect2D {
-        Rect2D::builder().extent(self.dimensions()).build()
+        Rect2D::default().extent(self.dimensions())
     }
 
     pub fn viewport(&self) -> Viewport {
@@ -324,13 +311,12 @@ impl UsamiPresentation {
         UsamiDevice::create_framebuffer(
             device,
             name,
-            FramebufferCreateInfo::builder()
+            FramebufferCreateInfo::default()
                 .render_pass(render_pass.handle)
                 .attachments(&[self.image_view.handle])
                 .width(dimensions.width)
                 .height(dimensions.height)
-                .layers(1)
-                .build(),
+                .layers(1),
         )
     }
 }

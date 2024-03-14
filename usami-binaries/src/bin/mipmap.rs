@@ -52,10 +52,9 @@ fn main() -> VkResult<()> {
     let command_pool = UsamiDevice::create_command_pool(
         &device,
         "command_pool".into(),
-        CommandPoolCreateInfo::builder()
+        CommandPoolCreateInfo::default()
             .queue_family_index(device.vk_queue_index)
-            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .build(),
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
     )?;
 
     let gradient_raw_image =
@@ -108,9 +107,7 @@ fn main() -> VkResult<()> {
     let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
     queue.submit(
-        &[SubmitInfo::builder()
-            .command_buffers(&[command_buffers[0].handle])
-            .build()],
+        &[SubmitInfo::default().command_buffers(&[command_buffers[0].handle])],
         &fence,
     )?;
     fence.wait(u64::MAX)?;

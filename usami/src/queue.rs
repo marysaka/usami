@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{
     prelude::*,
-    vk::{Handle, ObjectType, Queue, SubmitInfo},
+    vk::{Queue, SubmitInfo},
 };
 
 use crate::{UsamiDevice, UsamiFence};
@@ -48,7 +48,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiQueue> {
         let pipeline_layout = UsamiQueue::new(device, queue_family_index, queue_index)?;
 
-        device.set_debug_name(name, pipeline_layout.handle.as_raw(), ObjectType::QUEUE)?;
+        device.set_debug_name(name, pipeline_layout.handle)?;
 
         Ok(pipeline_layout)
     }

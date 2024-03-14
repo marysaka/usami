@@ -17,7 +17,7 @@ shader-dump = { version = "0.1.0", path = "./shader-dump" }
 nvshaderdump = { version = "0.1.0", path = "./nvshaderdump" }
 
 argh = "0.1.12"
-ash = { version = "0.37", features = ["debug"] }
+ash = { git = "https://github.com/ash-rs/ash.git", features = ["debug"] }
 axum = { version = "0.6", features = ["headers", "multipart"] }
 axum_typed_multipart = "0.10"
 colorgrad = "0.6"

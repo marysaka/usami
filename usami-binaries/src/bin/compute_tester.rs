@@ -86,11 +86,10 @@ fn main() -> VkResult<()> {
     let shader = UsamiDevice::create_shader(&device, "compute_shader".into(), &shader_code)?;
 
     shader_stage_create_infos.push(
-        PipelineShaderStageCreateInfo::builder()
+        PipelineShaderStageCreateInfo::default()
             .module(shader.handle)
             .name(shader_entrypoint_name.as_c_str())
-            .stage(ShaderStageFlags::COMPUTE)
-            .build(),
+            .stage(ShaderStageFlags::COMPUTE),
     );
     active_shaders.push(shader);
 
@@ -109,10 +108,9 @@ fn main() -> VkResult<()> {
         },
     ];
 
-    let descriptor_pool_create_info = DescriptorPoolCreateInfo::builder()
+    let descriptor_pool_create_info = DescriptorPoolCreateInfo::default()
         .pool_sizes(&descriptor_pool_sizes)
-        .max_sets(1)
-        .build();
+        .max_sets(1);
 
     let descriptor_pool = UsamiDevice::create_descriptor_pool(
         &device,
@@ -121,31 +119,26 @@ fn main() -> VkResult<()> {
     )?;
 
     let desc_layout_bindings = [
-        vk::DescriptorSetLayoutBinding::builder()
+        vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .descriptor_count(1)
-            .stage_flags(ShaderStageFlags::COMPUTE)
-            .build(),
-        vk::DescriptorSetLayoutBinding::builder()
+            .stage_flags(ShaderStageFlags::COMPUTE),
+        vk::DescriptorSetLayoutBinding::default()
             .binding(1)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
-            .stage_flags(ShaderStageFlags::COMPUTE)
-            .build(),
-        vk::DescriptorSetLayoutBinding::builder()
+            .stage_flags(ShaderStageFlags::COMPUTE),
+        vk::DescriptorSetLayoutBinding::default()
             .binding(2)
             .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
             .descriptor_count(1)
-            .stage_flags(ShaderStageFlags::COMPUTE)
-            .build(),
+            .stage_flags(ShaderStageFlags::COMPUTE),
     ];
     let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
         &device,
         "descriptor_set_layout".into(),
-        DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&desc_layout_bindings)
-            .build(),
+        DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings),
     )?;
 
     let descriptor_sets = descriptor_pool
@@ -174,7 +167,7 @@ fn main() -> VkResult<()> {
         MemoryPropertyFlags::HOST_VISIBLE,
     )?;
 
-    let output_image_info = ImageCreateInfo::builder()
+    let output_image_info = ImageCreateInfo::default()
         .image_type(ImageType::TYPE_1D)
         .format(Format::R32_SFLOAT)
         .extent(Extent3D {
@@ -186,8 +179,7 @@ fn main() -> VkResult<()> {
         .array_layers(1)
         .samples(SampleCountFlags::TYPE_1)
         .tiling(ImageTiling::OPTIMAL)
-        .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::TRANSFER_SRC)
-        .build();
+        .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::TRANSFER_SRC);
 
     let output_image = UsamiDevice::create_image(
         &device,
@@ -198,19 +190,17 @@ fn main() -> VkResult<()> {
     let output_image_view = output_image.create_simple_image_view(
         "output_image_view".into(),
         ImageViewType::TYPE_1D,
-        ImageSubresourceRange::builder()
+        ImageSubresourceRange::default()
             .aspect_mask(ImageAspectFlags::COLOR)
             .base_mip_level(0)
             .level_count(1)
             .base_array_layer(0)
-            .layer_count(output_image.create_info.array_layers)
-            .build(),
-        ComponentMapping::builder()
+            .layer_count(output_image.array_layers),
+        ComponentMapping::default()
             .r(ComponentSwizzle::IDENTITY)
             .g(ComponentSwizzle::IDENTITY)
             .b(ComponentSwizzle::IDENTITY)
-            .a(ComponentSwizzle::IDENTITY)
-            .build(),
+            .a(ComponentSwizzle::IDENTITY),
         ImageViewCreateFlags::empty(),
     )?;
 
@@ -227,35 +217,29 @@ fn main() -> VkResult<()> {
     unsafe {
         device.handle.update_descriptor_sets(
             &[
-                WriteDescriptorSet::builder()
+                WriteDescriptorSet::default()
                     .dst_set(descriptor_sets[0].handle)
                     .dst_binding(0)
                     .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .buffer_info(&[DescriptorBufferInfo::builder()
+                    .buffer_info(&[DescriptorBufferInfo::default()
                         .buffer(data_buffer.handle)
                         .offset(0)
-                        .range(vk::WHOLE_SIZE)
-                        .build()])
-                    .build(),
-                WriteDescriptorSet::builder()
+                        .range(vk::WHOLE_SIZE)]),
+                WriteDescriptorSet::default()
                     .dst_set(descriptor_sets[0].handle)
                     .dst_binding(1)
                     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(&[DescriptorBufferInfo::builder()
+                    .buffer_info(&[DescriptorBufferInfo::default()
                         .buffer(uniform_block.handle)
                         .offset(0)
-                        .range(vk::WHOLE_SIZE)
-                        .build()])
-                    .build(),
-                WriteDescriptorSet::builder()
+                        .range(vk::WHOLE_SIZE)]),
+                WriteDescriptorSet::default()
                     .dst_set(descriptor_sets[0].handle)
                     .dst_binding(2)
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-                    .image_info(&[DescriptorImageInfo::builder()
+                    .image_info(&[DescriptorImageInfo::default()
                         .image_layout(ImageLayout::GENERAL)
-                        .image_view(output_image_view.handle)
-                        .build()])
-                    .build(),
+                        .image_view(output_image_view.handle)]),
             ],
             &[],
         );
@@ -268,10 +252,9 @@ fn main() -> VkResult<()> {
         &[],
     )?;
 
-    let compute_pipeline_create_info = ComputePipelineCreateInfo::builder()
+    let compute_pipeline_create_info = ComputePipelineCreateInfo::default()
         .layout(pipeline_layout.handle)
-        .stage(shader_stage_create_infos[0])
-        .build();
+        .stage(shader_stage_create_infos[0]);
 
     let pipelines = UsamiDevice::create_compute_pipelines(
         &device,
@@ -283,10 +266,9 @@ fn main() -> VkResult<()> {
     let command_pool = UsamiDevice::create_command_pool(
         &device,
         "command_pool".into(),
-        CommandPoolCreateInfo::builder()
+        CommandPoolCreateInfo::default()
             .queue_family_index(device.vk_queue_index)
-            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .build(),
+            .flags(CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
     )?;
 
     let command_buffers = command_pool.allocate_command_buffers(
@@ -333,8 +315,8 @@ fn main() -> VkResult<()> {
                 &[output_image.buffer_copy(ImageAspectFlags::COLOR, 0, 0, 1)],
                 AccessFlags::empty(),
                 ImageLayout::UNDEFINED,
-                output_image.create_info.array_layers,
-                output_image.create_info.mip_levels,
+                output_image.array_layers,
+                output_image.mip_levels,
                 ImageAspectFlags::COLOR,
                 PipelineStageFlags::COMPUTE_SHADER,
             )?;
@@ -347,9 +329,7 @@ fn main() -> VkResult<()> {
     let queue = UsamiDevice::get_device_queue(&device, "queue".into(), device.vk_queue_index, 0)?;
 
     queue.submit(
-        &[SubmitInfo::builder()
-            .command_buffers(&[command_buffers[0].handle])
-            .build()],
+        &[SubmitInfo::default().command_buffers(&[command_buffers[0].handle])],
         &fence,
     )?;
     fence.wait(u64::MAX)?;

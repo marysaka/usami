@@ -3,10 +3,9 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent3D, Format,
-        Handle, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent3D, Format, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
         ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
-        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags, ObjectType,
+        ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
         SampleCountFlags, SharingMode,
     },
     Device,
@@ -17,7 +16,11 @@ use crate::{utils, UsamiCommandPool, UsamiDevice, UsamiDeviceMemory};
 
 pub struct UsamiImage {
     device: Arc<UsamiDevice>,
-    pub create_info: ImageCreateInfo,
+    pub extent: Extent3D,
+    pub format: Format,
+    pub samples: SampleCountFlags,
+    pub array_layers: u32,
+    pub mip_levels: u32,
     pub handle: Image,
     pub device_memory: UsamiDeviceMemory,
 }
@@ -39,7 +42,11 @@ impl UsamiImage {
 
         Ok(Self {
             device: device.clone(),
-            create_info,
+            extent: create_info.extent,
+            format: create_info.format,
+            samples: create_info.samples,
+            array_layers: create_info.array_layers,
+            mip_levels: create_info.mip_levels,
             handle,
             device_memory,
         })
@@ -56,14 +63,13 @@ impl UsamiImage {
         UsamiDevice::create_image_view(
             &self.device,
             name,
-            ImageViewCreateInfo::builder()
-                .format(self.create_info.format)
+            ImageViewCreateInfo::default()
+                .format(self.format)
                 .image(self.handle)
                 .view_type(view_type)
                 .subresource_range(subresource_range)
                 .components(components)
-                .flags(flags)
-                .build(),
+                .flags(flags),
         )
     }
 
@@ -74,18 +80,16 @@ impl UsamiImage {
         base_array_layer: u32,
         layer_count: u32,
     ) -> BufferImageCopy {
-        BufferImageCopy::builder()
+        BufferImageCopy::default()
             .buffer_offset(0)
             .image_subresource(
-                ImageSubresourceLayers::builder()
+                ImageSubresourceLayers::default()
                     .aspect_mask(aspect_mask)
                     .mip_level(mip_level)
                     .base_array_layer(base_array_layer)
-                    .layer_count(layer_count)
-                    .build(),
+                    .layer_count(layer_count),
             )
-            .image_extent(self.create_info.extent)
-            .build()
+            .image_extent(self.extent)
     }
 }
 
@@ -97,7 +101,6 @@ impl Drop for UsamiImage {
 
 pub struct UsamiImageView {
     device: Arc<UsamiDevice>,
-    pub create_info: ImageViewCreateInfo,
     pub handle: ImageView,
 }
 
@@ -107,7 +110,6 @@ impl UsamiImageView {
 
         Ok(Self {
             device: device.clone(),
-            create_info,
             handle,
         })
     }
@@ -128,7 +130,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiImage> {
         let image = UsamiImage::new(device, create_info, memory_flags)?;
 
-        device.set_debug_name(name, image.handle.as_raw(), ObjectType::IMAGE)?;
+        device.set_debug_name(name, image.handle)?;
 
         Ok(image)
     }
@@ -140,7 +142,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiImageView> {
         let image_view = UsamiImageView::new(device, create_info)?;
 
-        device.set_debug_name(name, image_view.handle.as_raw(), ObjectType::IMAGE_VIEW)?;
+        device.set_debug_name(name, image_view.handle)?;
 
         Ok(image_view)
     }
@@ -153,7 +155,8 @@ impl UsamiDevice {
         usage: ImageUsageFlags,
         layout: ImageLayout,
     ) -> VkResult<UsamiImage> {
-        let image_create_info = ImageCreateInfo::builder()
+        let queue_family_indices = &[device.vk_queue_index];
+        let image_create_info = ImageCreateInfo::default()
             .image_type(ImageType::TYPE_2D)
             .format(raw_image.format)
             .extent(raw_image.level_infos[0].extent)
@@ -163,8 +166,7 @@ impl UsamiDevice {
             .samples(SampleCountFlags::TYPE_1)
             .tiling(ImageTiling::OPTIMAL)
             .usage(usage | ImageUsageFlags::TRANSFER_DST)
-            .queue_family_indices(&[device.vk_queue_index])
-            .build();
+            .queue_family_indices(queue_family_indices);
         let image = Self::create_image(
             device,
             name.clone(),
@@ -202,18 +204,16 @@ pub struct RawImageLevelInfo {
 
 impl RawImageLevelInfo {
     pub fn buffer_copy(&self, aspect_mask: ImageAspectFlags, mip_level: u32) -> BufferImageCopy {
-        BufferImageCopy::builder()
+        BufferImageCopy::default()
             .buffer_offset(self.start_position as u64)
             .image_subresource(
-                ImageSubresourceLayers::builder()
+                ImageSubresourceLayers::default()
                     .aspect_mask(aspect_mask)
                     .mip_level(mip_level)
                     .base_array_layer(0)
-                    .layer_count(1)
-                    .build(),
+                    .layer_count(1),
             )
             .image_extent(self.extent)
-            .build()
     }
 
     pub fn size(&self, format: Format) -> u32 {

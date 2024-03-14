@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{
     prelude::*,
-    vk::{Handle, ObjectType, ShaderModule, ShaderModuleCreateFlags, ShaderModuleCreateInfo},
+    vk::{ShaderModule, ShaderModuleCreateFlags, ShaderModuleCreateInfo},
 };
 
 use crate::UsamiDevice;
@@ -14,10 +14,9 @@ pub struct UsamiShader {
 
 impl UsamiShader {
     pub fn new(device: &Arc<UsamiDevice>, code: &[u32]) -> VkResult<Self> {
-        let create_info = ShaderModuleCreateInfo::builder()
+        let create_info = ShaderModuleCreateInfo::default()
             .code(code)
-            .flags(ShaderModuleCreateFlags::empty())
-            .build();
+            .flags(ShaderModuleCreateFlags::empty());
 
         let handle = unsafe { device.handle.create_shader_module(&create_info, None)? };
 
@@ -42,7 +41,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiShader> {
         let shader = UsamiShader::new(device, code)?;
 
-        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::SHADER_MODULE)?;
+        device.set_debug_name(name, shader.handle)?;
 
         Ok(shader)
     }

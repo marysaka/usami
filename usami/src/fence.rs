@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{
     prelude::*,
-    vk::{Fence, FenceCreateFlags, FenceCreateInfo, Handle, ObjectType},
+    vk::{Fence, FenceCreateFlags, FenceCreateInfo},
 };
 
 use crate::UsamiDevice;
@@ -14,7 +14,7 @@ pub struct UsamiFence {
 
 impl UsamiFence {
     pub fn new(device: &Arc<UsamiDevice>, flags: FenceCreateFlags) -> VkResult<Self> {
-        let create_info = FenceCreateInfo::builder().flags(flags).build();
+        let create_info = FenceCreateInfo::default().flags(flags);
 
         let handle = unsafe { device.handle.create_fence(&create_info, None)? };
 
@@ -51,7 +51,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiFence> {
         let pipeline_layout = UsamiFence::new(device, flags)?;
 
-        device.set_debug_name(name, pipeline_layout.handle.as_raw(), ObjectType::FENCE)?;
+        device.set_debug_name(name, pipeline_layout.handle)?;
 
         Ok(pipeline_layout)
     }

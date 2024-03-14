@@ -34,8 +34,8 @@ fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult
     UsamiDevice::new_by_filter(
         create_instance()?,
         &[
-            ShaderObject::name().to_string_lossy().into(),
-            MeshShader::name().to_string_lossy().into(),
+            ShaderObject::NAME.to_string_lossy().into(),
+            MeshShader::NAME.to_string_lossy().into(),
         ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
@@ -170,14 +170,12 @@ fn create_descriptor_set_layouts(
             ..Default::default()
         };
 
-        let mut layout_info_builder =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&bindings);
+        let mut layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
         if has_update_after_bind {
-            layout_info_builder.flags |= vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL;
-            layout_info_builder = layout_info_builder.push_next(&mut layout_flags);
+            layout_info.flags |= vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL;
+            layout_info = layout_info.push_next(&mut layout_flags);
         }
 
-        let layout_info = layout_info_builder.build();
         let set_layout =
             UsamiDevice::create_descriptor_set_layout(device, "set_layout".into(), layout_info)
                 .map_err(|x| format!("Vulkan error: {x}"))?;
@@ -222,14 +220,13 @@ fn compile_shaders(
                 .map(|x| x.handle)
                 .collect::<Vec<DescriptorSetLayout>>();
 
-            let shader_info = vk::ShaderCreateInfoEXT::builder()
+            let shader_info = vk::ShaderCreateInfoEXT::default()
                 .stage(stage)
                 .next_stage(next_stages(stage))
                 .code_type(ShaderCodeTypeEXT::SPIRV)
                 .code(spirv)
                 .name(c_name.as_c_str())
-                .set_layouts(&set_layouts_handle)
-                .build();
+                .set_layouts(&set_layouts_handle);
 
             let bin = unsafe {
                 let shader_object = eso

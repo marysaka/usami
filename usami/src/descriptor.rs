@@ -4,8 +4,7 @@ use ash::{
     prelude::*,
     vk::{
         DescriptorPool, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo, DescriptorSet,
-        DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutCreateInfo, Handle,
-        ObjectType,
+        DescriptorSetAllocateInfo, DescriptorSetLayout, DescriptorSetLayoutCreateInfo,
     },
 };
 
@@ -70,19 +69,15 @@ impl UsamiDescriptorPool {
     ) -> VkResult<Vec<UsamiDescriptorSet>> {
         let command_buffers = UsamiDescriptorSet::new(
             &self.device,
-            DescriptorSetAllocateInfo::builder()
+            DescriptorSetAllocateInfo::default()
                 .descriptor_pool(self.handle)
-                .set_layouts(layouts)
-                .build(),
+                .set_layouts(layouts),
             self.should_free_sets,
         )?;
 
         for (idx, command_buffer) in command_buffers.iter().enumerate() {
-            self.device.set_debug_name(
-                format!("{name}_{idx}"),
-                command_buffer.handle.as_raw(),
-                ObjectType::DESCRIPTOR_SET,
-            )?;
+            self.device
+                .set_debug_name(format!("{name}_{idx}"), command_buffer.handle)?;
         }
 
         Ok(command_buffers)
@@ -147,7 +142,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiDescriptorPool> {
         let shader = UsamiDescriptorPool::new(device, create_info)?;
 
-        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::DESCRIPTOR_POOL)?;
+        device.set_debug_name(name, shader.handle)?;
 
         Ok(shader)
     }
@@ -159,11 +154,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiDescriptorSetLayout> {
         let layout = UsamiDescriptorSetLayout::new(device, create_info)?;
 
-        device.set_debug_name(
-            name,
-            layout.handle.as_raw(),
-            ObjectType::DESCRIPTOR_SET_LAYOUT,
-        )?;
+        device.set_debug_name(name, layout.handle)?;
 
         Ok(layout)
     }

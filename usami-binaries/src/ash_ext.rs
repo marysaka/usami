@@ -1,4 +1,4 @@
-use ash::{vk, Entry, Instance};
+use ash::{vk, Device, Instance};
 use std::ffi::CStr;
 use std::mem;
 
@@ -7,15 +7,15 @@ use std::mem;
 
 #[derive(Clone)]
 pub struct TransformFeedback {
-    handle: vk::Instance,
+    handle: vk::Device,
     fp: vk::ExtTransformFeedbackFn,
 }
 
 impl TransformFeedback {
-    pub fn new(entry: &Entry, instance: &Instance) -> Self {
-        let handle = instance.handle();
+    pub fn new(instance: &Instance, device: &Device) -> Self {
+        let handle = device.handle();
         let fp = vk::ExtTransformFeedbackFn::load(|name| unsafe {
-            mem::transmute(entry.get_instance_proc_addr(handle, name.as_ptr()))
+            mem::transmute(instance.get_device_proc_addr(handle, name.as_ptr()))
         });
         Self { handle, fp }
     }
@@ -131,10 +131,7 @@ impl TransformFeedback {
         );
     }
 
-    #[inline]
-    pub const fn name() -> &'static CStr {
-        vk::ExtTransformFeedbackFn::name()
-    }
+    pub const NAME: &'static CStr = vk::ExtTransformFeedbackFn::NAME;
 
     #[inline]
     pub fn fp(&self) -> &vk::ExtTransformFeedbackFn {
@@ -142,22 +139,22 @@ impl TransformFeedback {
     }
 
     #[inline]
-    pub fn instance(&self) -> vk::Instance {
+    pub fn device(&self) -> vk::Device {
         self.handle
     }
 }
 
 #[derive(Clone)]
 pub struct ConditionalRendering {
-    handle: vk::Instance,
+    handle: vk::Device,
     fp: vk::ExtConditionalRenderingFn,
 }
 
 impl ConditionalRendering {
-    pub fn new(entry: &Entry, instance: &Instance) -> Self {
-        let handle = instance.handle();
+    pub fn new(instance: &Instance, device: &Device) -> Self {
+        let handle = device.handle();
         let fp = vk::ExtConditionalRenderingFn::load(|name| unsafe {
-            mem::transmute(entry.get_instance_proc_addr(handle, name.as_ptr()))
+            mem::transmute(instance.get_device_proc_addr(handle, name.as_ptr()))
         });
         Self { handle, fp }
     }
@@ -178,10 +175,7 @@ impl ConditionalRendering {
         (self.fp.cmd_end_conditional_rendering_ext)(command_buffer);
     }
 
-    #[inline]
-    pub const fn name() -> &'static CStr {
-        vk::ExtConditionalRenderingFn::name()
-    }
+    pub const NAME: &'static CStr = vk::ExtConditionalRenderingFn::NAME;
 
     #[inline]
     pub fn fp(&self) -> &vk::ExtConditionalRenderingFn {
@@ -189,7 +183,7 @@ impl ConditionalRendering {
     }
 
     #[inline]
-    pub fn instance(&self) -> vk::Instance {
+    pub fn device(&self) -> vk::Device {
         self.handle
     }
 }

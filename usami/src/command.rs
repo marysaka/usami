@@ -6,8 +6,8 @@ use ash::{
         self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, ClearColorValue, CommandBuffer,
         CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferInheritanceInfo,
         CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo,
-        DependencyFlags, Handle, ImageAspectFlags, ImageLayout, ImageMemoryBarrier,
-        ImageSubresourceRange, MemoryBarrier, ObjectType, PipelineStageFlags,
+        DependencyFlags, ImageAspectFlags, ImageLayout, ImageMemoryBarrier,
+        ImageSubresourceRange, MemoryBarrier, PipelineStageFlags,
     },
 };
 
@@ -36,19 +36,15 @@ impl UsamiCommandPool {
     ) -> VkResult<Vec<UsamiCommandBuffer>> {
         let command_buffers = UsamiCommandBuffer::new(
             &self.device,
-            CommandBufferAllocateInfo::builder()
+            CommandBufferAllocateInfo::default()
                 .command_pool(self.handle)
                 .level(level)
-                .command_buffer_count(command_buffer_count)
-                .build(),
+                .command_buffer_count(command_buffer_count),
         )?;
 
         for (idx, command_buffer) in command_buffers.iter().enumerate() {
-            self.device.set_debug_name(
-                format!("{name}_{idx}"),
-                command_buffer.handle.as_raw(),
-                ObjectType::COMMAND_BUFFER,
-            )?;
+            self.device
+                .set_debug_name(format!("{name}_{idx}"), command_buffer.handle)?;
         }
 
         Ok(command_buffers)
@@ -103,10 +99,9 @@ impl UsamiCommandBuffer {
         unsafe {
             self.device.handle.begin_command_buffer(
                 self.handle,
-                &CommandBufferBeginInfo::builder()
+                &CommandBufferBeginInfo::default()
                     .inheritance_info(&inheritance_info)
-                    .flags(flags)
-                    .build(),
+                    .flags(flags),
             )?;
 
             callback(&self.device, self)?;
@@ -129,13 +124,12 @@ impl UsamiCommandBuffer {
         new_layout: ImageLayout,
     ) -> VkResult<()> {
         let image_subresource_range = image_subresource_range_opt.unwrap_or(
-            ImageSubresourceRange::builder()
+            ImageSubresourceRange::default()
                 .base_array_layer(0)
-                .layer_count(image.create_info.array_layers)
+                .layer_count(image.array_layers)
                 .base_mip_level(0)
-                .level_count(image.create_info.mip_levels)
-                .aspect_mask(ImageAspectFlags::COLOR)
-                .build(),
+                .level_count(image.mip_levels)
+                .aspect_mask(ImageAspectFlags::COLOR),
         );
 
         unsafe {
@@ -146,7 +140,7 @@ impl UsamiCommandBuffer {
                 DependencyFlags::empty(),
                 &[],
                 &[],
-                &[ImageMemoryBarrier::builder()
+                &[ImageMemoryBarrier::default()
                     .src_access_mask(src_access_mask)
                     .dst_access_mask(dst_access_mask)
                     .old_layout(old_layout)
@@ -154,8 +148,7 @@ impl UsamiCommandBuffer {
                     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .image(image.handle)
-                    .subresource_range(image_subresource_range)
-                    .build()],
+                    .subresource_range(image_subresource_range)],
             );
         }
 
@@ -179,15 +172,14 @@ impl UsamiCommandBuffer {
                 dst_stage_mask,
                 DependencyFlags::empty(),
                 &[],
-                &[BufferMemoryBarrier::builder()
+                &[BufferMemoryBarrier::default()
                     .src_access_mask(src_access_mask)
                     .dst_access_mask(dst_access_mask)
                     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .buffer(buffer.handle)
                     .offset(offset)
-                    .size(size)
-                    .build()],
+                    .size(size)],
                 &[],
             );
         }
@@ -208,10 +200,9 @@ impl UsamiCommandBuffer {
                 src_stage_mask,
                 dst_stage_mask,
                 DependencyFlags::empty(),
-                &[MemoryBarrier::builder()
+                &[MemoryBarrier::default()
                     .src_access_mask(src_access_mask)
-                    .dst_access_mask(dst_access_mask)
-                    .build()],
+                    .dst_access_mask(dst_access_mask)],
                 &[],
                 &[],
             );
@@ -240,11 +231,10 @@ impl UsamiCommandBuffer {
                 &ClearColorValue {
                     float32: [r, g, b, a],
                 },
-                &[ImageSubresourceRange::builder()
+                &[ImageSubresourceRange::default()
                     .aspect_mask(ImageAspectFlags::COLOR)
-                    .layer_count(image.create_info.array_layers)
-                    .level_count(image.create_info.mip_levels)
-                    .build()],
+                    .layer_count(image.array_layers)
+                    .level_count(image.mip_levels)],
             );
         }
 
@@ -272,13 +262,12 @@ impl UsamiCommandBuffer {
         dest_image_dst_access_mask: AccessFlags,
         base_mip_level: u32,
     ) -> VkResult<()> {
-        let subresource_range = ImageSubresourceRange::builder()
+        let subresource_range = ImageSubresourceRange::default()
             .aspect_mask(image_aspect_flags)
             .base_mip_level(base_mip_level)
             .level_count(mip_levels)
             .base_array_layer(0)
-            .layer_count(array_layers)
-            .build();
+            .layer_count(array_layers);
 
         unsafe {
             self.device.handle.cmd_pipeline_barrier(
@@ -287,16 +276,15 @@ impl UsamiCommandBuffer {
                 PipelineStageFlags::TRANSFER,
                 DependencyFlags::empty(),
                 &[],
-                &[BufferMemoryBarrier::builder()
+                &[BufferMemoryBarrier::default()
                     .src_access_mask(AccessFlags::HOST_WRITE)
                     .dst_access_mask(AccessFlags::TRANSFER_READ)
                     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .buffer(buffer.handle)
                     .offset(0)
-                    .size(buffer_size)
-                    .build()],
-                &[ImageMemoryBarrier::builder()
+                    .size(buffer_size)],
+                &[ImageMemoryBarrier::default()
                     .src_access_mask(AccessFlags::empty())
                     .dst_access_mask(AccessFlags::TRANSFER_WRITE)
                     .old_layout(ImageLayout::UNDEFINED)
@@ -304,8 +292,7 @@ impl UsamiCommandBuffer {
                     .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .image(dest_image.handle)
-                    .subresource_range(subresource_range)
-                    .build()],
+                    .subresource_range(subresource_range)],
             );
 
             self.device.handle.cmd_copy_buffer_to_image(
@@ -343,13 +330,12 @@ impl UsamiCommandBuffer {
         barrier_aspect: ImageAspectFlags,
         src_stage_mask: PipelineStageFlags,
     ) -> VkResult<()> {
-        let image_subresource_range = ImageSubresourceRange::builder()
+        let image_subresource_range = ImageSubresourceRange::default()
             .base_array_layer(0)
             .layer_count(layer_count)
             .base_mip_level(0)
             .level_count(level_count)
-            .aspect_mask(barrier_aspect)
-            .build();
+            .aspect_mask(barrier_aspect);
 
         self.add_image_barrier(
             image,
@@ -403,7 +389,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiCommandPool> {
         let shader = UsamiCommandPool::new(device, create_info)?;
 
-        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::COMMAND_POOL)?;
+        device.set_debug_name(name, shader.handle)?;
 
         Ok(shader)
     }
@@ -426,8 +412,8 @@ impl UsamiDevice {
                     vk::WHOLE_SIZE,
                     copy_regions,
                     ImageAspectFlags::COLOR,
-                    image.create_info.mip_levels,
-                    image.create_info.array_layers,
+                    image.mip_levels,
+                    image.array_layers,
                     image,
                     new_layout,
                     PipelineStageFlags::FRAGMENT_SHADER,

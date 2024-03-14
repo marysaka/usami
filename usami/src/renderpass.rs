@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{
     prelude::*,
-    vk::{Handle, ObjectType, RenderPass, RenderPassCreateInfo},
+    vk::{RenderPass, RenderPassCreateInfo},
 };
 
 use crate::UsamiDevice;
@@ -37,7 +37,7 @@ impl UsamiDevice {
     ) -> VkResult<UsamiRenderPass> {
         let shader = UsamiRenderPass::new(device, create_info)?;
 
-        device.set_debug_name(name, shader.handle.as_raw(), ObjectType::RENDER_PASS)?;
+        device.set_debug_name(name, shader.handle)?;
 
         Ok(shader)
     }
