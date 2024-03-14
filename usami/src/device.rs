@@ -4,17 +4,20 @@ use std::{
 };
 
 use ash::{
-    extensions::ext::{MeshShader, ShaderObject},
+    extensions::{
+        ext::{MeshShader, ShaderObject},
+        khr::CooperativeMatrix,
+    },
     prelude::*,
     vk::{
         self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-        ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
-        FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, PhysicalDevice,
-        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceFeatures,
-        PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties,
+        CooperativeMatrixPropertiesKHR, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo,
+        DeviceQueueCreateInfo, ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D,
+        Extent3D, Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo,
+        ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags,
+        ImageViewType, MemoryPropertyFlags, PhysicalDevice,
+        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR,
+        PhysicalDeviceFeatures, PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties,
         PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties,
         PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT,
         PhysicalDeviceVulkan12Features, QueueFamilyProperties, Rect2D, SampleCountFlags,
@@ -84,6 +87,7 @@ impl UsamiDevice {
         let mut has_mesh_shader_extension = false;
         let mut has_conditional_rendering_extension = false;
         let mut has_xfb_extension = false;
+        let mut has_cooperative_matrix = false;
 
         for extension in &extensions_cstring {
             if ShaderObject::NAME == extension.as_c_str() {
@@ -100,6 +104,10 @@ impl UsamiDevice {
 
             if ExtTransformFeedbackFn::NAME == extension.as_c_str() {
                 has_xfb_extension = true;
+            }
+
+            if CooperativeMatrix::NAME == extension.as_c_str() {
+                has_cooperative_matrix = true;
             }
         }
 
@@ -135,6 +143,9 @@ impl UsamiDevice {
             .transform_feedback(true)
             .geometry_streams(true);
 
+        let mut cooperative_matrix_features =
+            PhysicalDeviceCooperativeMatrixFeaturesKHR::default().cooperative_matrix(true);
+
         let mut create_info = DeviceCreateInfo::default()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
@@ -159,6 +170,10 @@ impl UsamiDevice {
 
         if has_xfb_extension {
             create_info = create_info.push_next(&mut xfb_features);
+        }
+
+        if has_cooperative_matrix {
+            create_info = create_info.push_next(&mut cooperative_matrix_features);
         }
 
         if instance.vk_version >= vk::API_VERSION_1_2 {
