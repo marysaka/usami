@@ -1,15 +1,15 @@
 use ash::{
-    extensions::khr::CooperativeMatrix,
     prelude::VkResult,
     vk::{self},
 };
 use usami::{UsamiDevice, UsamiInstance};
+use usami_binaries::ash_ext::NvCooperativeMatrix;
 
 fn main() -> VkResult<()> {
     let extensions = ["VK_EXT_debug_utils".into()];
 
     let instance = UsamiInstance::new(
-        "khr_cooperative_matrix_query",
+        "nv_cooperative_matrix_query",
         "usami",
         vk::API_VERSION_1_1,
         &extensions,
@@ -17,7 +17,7 @@ fn main() -> VkResult<()> {
     )?;
     let device = UsamiDevice::new_by_filter(
         instance,
-        &[CooperativeMatrix::NAME.to_string_lossy().to_string()],
+        &[NvCooperativeMatrix::NAME.to_string_lossy().to_string()],
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -35,7 +35,7 @@ fn main() -> VkResult<()> {
     )?;
 
     let cooperative_matrix =
-        CooperativeMatrix::new(&device.instance.vk_entry, &device.instance.vk_instance);
+        NvCooperativeMatrix::new(&device.instance.vk_entry, &device.instance.vk_instance);
 
     let cooperative_matrix_props = unsafe {
         cooperative_matrix

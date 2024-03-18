@@ -3,7 +3,8 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent3D, Format, Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
+        BufferCreateFlags, BufferImageCopy, BufferUsageFlags, ComponentMapping, Extent3D, Format,
+        Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
         ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
         ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
         SampleCountFlags, SharingMode,

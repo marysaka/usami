@@ -3,7 +3,8 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, MemoryPropertyFlags, SharingMode,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, MemoryPropertyFlags,
+        SharingMode,
     },
     Device,
 };

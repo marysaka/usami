@@ -6,8 +6,8 @@ use ash::{
         self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, ClearColorValue, CommandBuffer,
         CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferInheritanceInfo,
         CommandBufferLevel, CommandBufferUsageFlags, CommandPool, CommandPoolCreateInfo,
-        DependencyFlags, ImageAspectFlags, ImageLayout, ImageMemoryBarrier,
-        ImageSubresourceRange, MemoryBarrier, PipelineStageFlags,
+        DependencyFlags, ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange,
+        MemoryBarrier, PipelineStageFlags,
     },
 };
 

@@ -1,7 +1,10 @@
 use ash::{
-    extensions::{ext::{MeshShader, ShaderObject}, khr::CooperativeMatrix},
+    extensions::{
+        ext::{MeshShader, ShaderObject},
+        khr::CooperativeMatrix,
+    },
     prelude::VkResult,
-    vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderStageFlags},
+    vk::{self, DescriptorSetLayout, NvCooperativeMatrixFn, ShaderCodeTypeEXT, ShaderStageFlags},
 };
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use hyper::{body::Bytes, header};
@@ -36,7 +39,7 @@ fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult
         &[
             ShaderObject::NAME.to_string_lossy().into(),
             MeshShader::NAME.to_string_lossy().into(),
-            CooperativeMatrix::NAME.to_string_lossy().into(),
+            NvCooperativeMatrixFn::NAME.to_string_lossy().into(),
         ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {

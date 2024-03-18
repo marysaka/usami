@@ -1,6 +1,33 @@
-use ash::{vk, Device, Instance};
+use ash::prelude::VkResult;
+use ash::{vk, Device, Entry, Instance};
 use std::ffi::CStr;
 use std::mem;
+
+// Copy paste from ash as it's private
+pub(crate) unsafe fn read_into_defaulted_vector<
+    N: Copy + Default + TryInto<usize>,
+    T: Default + Clone,
+>(
+    f: impl Fn(&mut N, *mut T) -> vk::Result,
+) -> VkResult<Vec<T>>
+where
+    <N as TryInto<usize>>::Error: std::fmt::Debug,
+{
+    loop {
+        let mut count = N::default();
+        f(&mut count, std::ptr::null_mut()).result()?;
+        let mut data =
+            vec![Default::default(); count.try_into().expect("`N` failed to convert to `usize`")];
+
+        let err_code = f(&mut count, data.as_mut_ptr());
+        if err_code != vk::Result::INCOMPLETE {
+            break err_code.set_vec_len_on_success(
+                data,
+                count.try_into().expect("`N` failed to convert to `usize`"),
+            );
+        }
+    }
+}
 
 // Missing extensions definition goes here for now
 // TODO: upstream this
@@ -185,5 +212,43 @@ impl ConditionalRendering {
     #[inline]
     pub fn device(&self) -> vk::Device {
         self.handle
+    }
+}
+
+/// <https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_NV_cooperative_matrix.html>
+#[derive(Clone)]
+pub struct NvCooperativeMatrix {
+    fp: vk::NvCooperativeMatrixFn,
+}
+
+impl NvCooperativeMatrix {
+    pub fn new(entry: &Entry, instance: &Instance) -> Self {
+        let handle = instance.handle();
+        let fp = vk::NvCooperativeMatrixFn::load(|name| unsafe {
+            mem::transmute(entry.get_instance_proc_addr(handle, name.as_ptr()))
+        });
+        Self { fp }
+    }
+
+    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkGetPhysicalDeviceCooperativeMatrixPropertiesNV.html>
+    #[inline]
+    pub unsafe fn get_physical_device_cooperative_matrix_properties(
+        &self,
+        physical_device: vk::PhysicalDevice,
+    ) -> VkResult<Vec<vk::CooperativeMatrixPropertiesNV<'_>>> {
+        read_into_defaulted_vector(|count, data| {
+            (self.fp.get_physical_device_cooperative_matrix_properties_nv)(
+                physical_device,
+                count,
+                data,
+            )
+        })
+    }
+
+    pub const NAME: &'static CStr = vk::NvCooperativeMatrixFn::NAME;
+
+    #[inline]
+    pub fn fp(&self) -> &vk::NvCooperativeMatrixFn {
+        &self.fp
     }
 }

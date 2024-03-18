@@ -15,8 +15,9 @@ use ash::{
         ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
         FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
         ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, PhysicalDevice, PhysicalDeviceConditionalRenderingFeaturesEXT,
-        PhysicalDeviceCooperativeMatrixFeaturesKHR, PhysicalDeviceFeatures,
+        MemoryPropertyFlags, NvCooperativeMatrixFn, PhysicalDevice,
+        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR,
+        PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures,
         PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties,
         PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties,
         PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT,
@@ -88,6 +89,7 @@ impl UsamiDevice {
         let mut has_conditional_rendering_extension = false;
         let mut has_xfb_extension = false;
         let mut has_cooperative_matrix = false;
+        let mut has_cooperative_matrix_nv = false;
 
         for extension in &extensions_cstring {
             if ShaderObject::NAME == extension.as_c_str() {
@@ -108,6 +110,10 @@ impl UsamiDevice {
 
             if CooperativeMatrix::NAME == extension.as_c_str() {
                 has_cooperative_matrix = true;
+            }
+
+            if NvCooperativeMatrixFn::NAME == extension.as_c_str() {
+                has_cooperative_matrix_nv = true;
             }
         }
 
@@ -146,6 +152,9 @@ impl UsamiDevice {
         let mut cooperative_matrix_features =
             PhysicalDeviceCooperativeMatrixFeaturesKHR::default().cooperative_matrix(true);
 
+        let mut cooperative_matrix_nv_features =
+            PhysicalDeviceCooperativeMatrixFeaturesNV::default().cooperative_matrix(true);
+
         let mut create_info = DeviceCreateInfo::default()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
@@ -174,6 +183,10 @@ impl UsamiDevice {
 
         if has_cooperative_matrix {
             create_info = create_info.push_next(&mut cooperative_matrix_features);
+        }
+
+        if has_cooperative_matrix_nv {
+            create_info = create_info.push_next(&mut cooperative_matrix_nv_features);
         }
 
         if instance.vk_version >= vk::API_VERSION_1_2 {
