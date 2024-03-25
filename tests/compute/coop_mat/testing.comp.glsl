@@ -23,8 +23,8 @@
 
 // Matrix setup
 #define M_SIZE 16
-#define N_SIZE 16
-#define K_SIZE 16
+#define N_SIZE 8
+#define K_SIZE 8
 // Shared
 #define inputTypeBase float16_t
 #define INPUT_BIT_SIZE 16
@@ -53,14 +53,14 @@
   DEF_COOP_MAT_TYPE(inputTypeD, D_BIT_SIZE, M_SIZE, N_SIZE,                    \
                     MATRIX_USE_ACCUMULATOR)
 
-layout(constant_id = 0) const int loop = 1;
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0) buffer d_blob { inputTypeD d_blob_data[]; };
 
-layout(binding = 0) readonly buffer blob {
+layout(std430, set = 0, binding = 1) readonly buffer blob {
   inputTypeA a_blob_data[M_SIZE * K_SIZE];
   inputTypeB b_blob_data[K_SIZE * N_SIZE];
   inputTypeB c_blob_data[M_SIZE * N_SIZE];
 };
-layout(binding = 1) writeonly buffer d_blob { inputTypeD d_blob_data[]; };
 
 shared inputTypeA tmp_a[M_SIZE * K_SIZE];
 shared inputTypeB tmp_b[K_SIZE * N_SIZE];
@@ -68,16 +68,11 @@ shared inputTypeC tmp_c[M_SIZE * N_SIZE];
 shared inputTypeD tmp_d[M_SIZE * N_SIZE];
 
 void main() {
-  const int gx = int(gl_GlobalInvocationID.x);
   const int lx = int(gl_LocalInvocationID.x);
 
-  // This is only to write some values around to ensure the shared are used.
-  // This is of course not correct but will do for now
-  if (lx < 32) {
-    tmp_a[lx] = a_blob_data[gx];
-    tmp_b[lx] = b_blob_data[gx];
-    tmp_c[lx] = c_blob_data[gx];
-  }
+  tmp_a[lx] = a_blob_data[lx];
+  tmp_b[lx] = b_blob_data[lx];
+  tmp_c[lx] = c_blob_data[lx];
 
   barrier();
 
@@ -91,16 +86,14 @@ void main() {
   coopmatTypeC c;
   coopFrameworkMatLoad(c, tmp_c, 0, C_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
 
+  // COOP_MAT_MUL_ADD
   coopmatTypeD d = coopFrameworkMatMulAdd(a, b, c);
 
   // STORE
-  coopFrameworkMatStore(d, tmp_d, 4, D_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+  coopFrameworkMatStore(d, tmp_d, 0, D_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
   barrier();
 
-  if (lx < 32) {
-    // Some random external write
-    d_blob_data[gx] = tmp_d[lx];
-  }
+  d_blob_data[lx] = tmp_d[lx];
 }
 
 // m_size: 16, n_size: 16, k_size: 16, a_type: FLOAT16, b_type: FLOAT16, c_type: FLOAT16, result_type: FLOAT16

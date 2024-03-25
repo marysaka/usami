@@ -36,9 +36,25 @@ struct Args {
     #[argh(option)]
     group_count_z: Option<u32>,
 
+    /// the path of the file to load the input buffer.
+    #[argh(option)]
+    input_buffer_file: Option<PathBuf>,
+
+    /// extra device extension to add.
+    #[argh(option)]
+    device_extension: Vec<String>,
+
     /// the path of the file to store the output buffer.
     #[argh(option)]
     output_buffer_file: Option<PathBuf>,
+
+    /// make the input a buffer instead of a uniform.
+    #[argh(option, default = "false")]
+    input_as_buffer: bool,
+
+    /// vulkan API raw version to use.
+    #[argh(option, default = "0x400000")]
+    vk_version: u32,
 }
 
 fn main() -> VkResult<()> {
@@ -54,13 +70,13 @@ fn main() -> VkResult<()> {
     let instance = UsamiInstance::new(
         "compute_tester",
         "usami",
-        vk::API_VERSION_1_0,
+        args.vk_version,
         &extensions,
-        false,
+        true,
     )?;
     let device = UsamiDevice::new_by_filter(
         instance,
-        &[],
+        &args.device_extension,
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties
@@ -93,13 +109,19 @@ fn main() -> VkResult<()> {
     );
     active_shaders.push(shader);
 
+    let input_desc_type = if args.input_as_buffer {
+        vk::DescriptorType::STORAGE_BUFFER
+    } else {
+        vk::DescriptorType::UNIFORM_BUFFER
+    };
+
     let descriptor_pool_sizes = [
         vk::DescriptorPoolSize {
             ty: vk::DescriptorType::STORAGE_BUFFER,
             descriptor_count: 1,
         },
         vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            ty: input_desc_type,
             descriptor_count: 1,
         },
         vk::DescriptorPoolSize {
@@ -126,7 +148,7 @@ fn main() -> VkResult<()> {
             .stage_flags(ShaderStageFlags::COMPUTE),
         vk::DescriptorSetLayoutBinding::default()
             .binding(1)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_type(input_desc_type)
             .descriptor_count(1)
             .stage_flags(ShaderStageFlags::COMPUTE),
         vk::DescriptorSetLayoutBinding::default()
@@ -148,13 +170,23 @@ fn main() -> VkResult<()> {
 
     let descriptor_sets = descriptor_sets?;
 
+    let uniform_block_data = if let Some(input_buffer_file) = &args.input_buffer_file {
+        std::fs::read(input_buffer_file).expect("Cannot read input buffer")
+    } else {
+        0x42u32.to_le_bytes().to_vec()
+    };
+
     let uniform_block = UsamiDevice::create_buffer(
         &device,
         "uniform_block".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
-        BufferUsageFlags::UNIFORM_BUFFER,
-        &[0x42u32],
+        if args.input_as_buffer {
+            BufferUsageFlags::STORAGE_BUFFER
+        } else {
+            BufferUsageFlags::UNIFORM_BUFFER
+        },
+        &uniform_block_data,
     )?;
 
     let data_buffer = UsamiDevice::create_buffer_with_size(
@@ -228,7 +260,7 @@ fn main() -> VkResult<()> {
                 WriteDescriptorSet::default()
                     .dst_set(descriptor_sets[0].handle)
                     .dst_binding(1)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_type(input_desc_type)
                     .buffer_info(&[DescriptorBufferInfo::default()
                         .buffer(uniform_block.handle)
                         .offset(0)
