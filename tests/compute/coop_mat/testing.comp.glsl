@@ -1,5 +1,6 @@
 #version 450
 
+#extension GL_GOOGLE_include_directive : require
 #extension GL_EXT_shader_16bit_storage : require
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
 #extension GL_KHR_memory_scope_semantics : require
@@ -11,10 +12,12 @@
 #define COOP_TYPE_F 2
 
 // Select if KHR ext should be used
-#define USE_KHR_EXT 1
+// #define USE_KHR_EXT
 
 // Indicate the type of coop matrix
 #define COOP_TYPE COOP_TYPE_F
+
+#include "coop_framework.h"
 
 // Configuration of the shader
 
@@ -38,60 +41,6 @@
 #define inputTypeD inputTypeBase
 #define D_BIT_SIZE INPUT_BIT_SIZE
 
-// Start of magical wrapper
-#if USE_KHR_EXT == 1
-// KHR EXT
-#extension GL_KHR_cooperative_matrix : require
-
-// Values
-#define MATRIX_LAYOUT_ROW_MAJOR gl_CooperativeMatrixLayoutRowMajor
-#define MATRIX_LAYOUT_COLUMN_MAJOR gl_CooperativeMatrixLayoutColumnMajor
-#define MATRIX_USE_A gl_MatrixUseA
-#define MATRIX_USE_B gl_MatrixUseB
-#define MATRIX_USE_ACCUMULATOR gl_MatrixUseAccumulator
-
-// Operations
-#define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
-  coopmat<input_type, gl_ScopeSubgroup, rows, columns, usage>
-#define CREATE_COOP_MAT(type, dst, src, stride, bit_size, column_major)        \
-  type dst;                                                                    \
-  coopMatLoad(dst, src, stride, bit_size / 8, column_major)
-#define STORE_COOP_MAT(dst, src, stride, bit_size, column_major)               \
-  coopMatStore(src, dst, stride, bit_size / 8, column_major)
-#define COOP_MAT_MUL_ADD(a, b, c) coopMatMulAdd(a, b, c)
-
-#else
-// NVIDIA EXT
-#extension GL_NV_cooperative_matrix : require
-#extension GL_NV_integer_cooperative_matrix : require
-
-// Values
-#define MATRIX_LAYOUT_ROW_MAJOR false
-#define MATRIX_LAYOUT_COLUMN_MAJOR true
-#define MATRIX_USE_A 0
-#define MATRIX_USE_B 1
-#define MATRIX_USE_ACCUMULATOR 2
-
-// Operations
-#if COOP_TYPE == COOP_TYPE_F
-#define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
-  fcoopmatNV<bit_size, gl_ScopeSubgroup, rows, columns>
-#elif COOP_TYPE == COOP_TYPE_U
-#define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
-  ucoopmatNV<bit_size, gl_ScopeSubgroup, rows, columns>
-#elif COOP_TYPE == COOP_TYPE_I
-#define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
-  icoopmatNV<bit_size, gl_ScopeSubgroup, rows, columns>
-#endif
-#define CREATE_COOP_MAT(type, dst, src, stride, bit_size, column_major)        \
-  type dst;                                                                    \
-  coopMatLoadNV(dst, src, stride, bit_size / 8, column_major)
-#define STORE_COOP_MAT(dst, src, stride, bit_size, column_major)               \
-  coopMatStoreNV(src, dst, stride, bit_size / 8, column_major)
-#define COOP_MAT_MUL_ADD(a, b, c) coopMatMulAddNV(a, b, c)
-#endif
-// end of magical wrapper
-
 // Shader start
 #define coopmatTypeA                                                           \
   DEF_COOP_MAT_TYPE(inputTypeA, A_BIT_SIZE, M_SIZE, K_SIZE, MATRIX_USE_A)
@@ -111,7 +60,7 @@ layout(binding = 0) readonly buffer blob {
   inputTypeB b_blob_data[K_SIZE * N_SIZE];
   inputTypeB c_blob_data[M_SIZE * N_SIZE];
 };
-layout(binding = 3) writeonly buffer d_blob { inputTypeD d_blob_data[]; };
+layout(binding = 1) writeonly buffer d_blob { inputTypeD d_blob_data[]; };
 
 shared inputTypeA tmp_a[M_SIZE * K_SIZE];
 shared inputTypeB tmp_b[K_SIZE * N_SIZE];
@@ -133,18 +82,19 @@ void main() {
   barrier();
 
   // LOAD
-  CREATE_COOP_MAT(coopmatTypeA, a, tmp_a, 0, A_BIT_SIZE,
-                  MATRIX_LAYOUT_ROW_MAJOR);
-  CREATE_COOP_MAT(coopmatTypeB, b, tmp_b, 0, B_BIT_SIZE,
-                  MATRIX_LAYOUT_ROW_MAJOR);
-  CREATE_COOP_MAT(coopmatTypeC, c, tmp_c, 0, C_BIT_SIZE,
-                  MATRIX_LAYOUT_ROW_MAJOR);
+  coopmatTypeA a;
+  coopFrameworkMatLoad(a, tmp_a, 0, A_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
 
-  // COOP_MAT_MUL_ADD
-  coopmatTypeD d = COOP_MAT_MUL_ADD(a, b, c);
+  coopmatTypeB b;
+  coopFrameworkMatLoad(b, tmp_b, 0, B_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+
+  coopmatTypeC c;
+  coopFrameworkMatLoad(c, tmp_c, 0, C_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+
+  coopmatTypeD d = coopFrameworkMatMulAdd(a, b, c);
 
   // STORE
-  STORE_COOP_MAT(tmp_d, d, 4, D_BIT_SIZE, MATRIX_LAYOUT_ROW_MAJOR);
+  coopFrameworkMatStore(d, tmp_d, 4, D_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
   barrier();
 
   if (lx < 32) {
