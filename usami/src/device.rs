@@ -17,11 +17,11 @@ use ash::{
         ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
         MemoryPropertyFlags, NvCooperativeMatrixFn, PhysicalDevice,
         PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR,
-        PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures,
-        PhysicalDeviceMaintenance4Features, PhysicalDeviceMemoryProperties,
-        PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties,
-        PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT,
-        PhysicalDeviceVulkan11Features, PhysicalDeviceVulkan12Features, QueueFamilyProperties,
+        PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
+        PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
+        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT,
+        PhysicalDeviceTransformFeedbackFeaturesEXT, PhysicalDeviceVulkan11Features,
+        PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFamilyProperties,
         Rect2D, SampleCountFlags, SharingMode, Viewport,
     },
 };
@@ -160,19 +160,6 @@ impl UsamiDevice {
             .enabled_features(&enabled_features)
             .enabled_extension_names(&extensions_raw);
 
-        let mut vk11_features = PhysicalDeviceVulkan11Features::default()
-            .storage_buffer16_bit_access(true)
-            .uniform_and_storage_buffer16_bit_access(true);
-
-        let mut vk12_features = PhysicalDeviceVulkan12Features::default()
-            .host_query_reset(true)
-            .shader_float16(true)
-            .storage_buffer8_bit_access(true)
-            .vulkan_memory_model(true);
-
-        let mut maintenance4_features =
-            PhysicalDeviceMaintenance4Features::default().maintenance4(true);
-
         if has_shader_object_extension {
             create_info = create_info.push_next(&mut shader_object_features);
         }
@@ -197,16 +184,31 @@ impl UsamiDevice {
             create_info = create_info.push_next(&mut cooperative_matrix_nv_features);
         }
 
-        if instance.vk_version >= vk::API_VERSION_1_1 {
-            create_info = create_info.push_next(&mut vk11_features);
-        }
+        let mut vk11_features = PhysicalDeviceVulkan11Features::default();
+        let mut vk12_features = PhysicalDeviceVulkan12Features::default();
+        let mut vk13_features = PhysicalDeviceVulkan13Features::default();
 
         if instance.vk_version >= vk::API_VERSION_1_2 {
-            create_info = create_info.push_next(&mut vk12_features);
-        }
+            let mut tmp_feat = PhysicalDeviceFeatures2::default();
+            tmp_feat = tmp_feat.push_next(&mut vk11_features);
+            tmp_feat = tmp_feat.push_next(&mut vk12_features);
 
-        if instance.vk_version >= vk::API_VERSION_1_3 {
-            create_info = create_info.push_next(&mut maintenance4_features);
+            if instance.vk_version >= vk::API_VERSION_1_3 {
+                tmp_feat = tmp_feat.push_next(&mut vk13_features);
+            }
+
+            unsafe {
+                instance
+                    .vk_instance
+                    .get_physical_device_features2(physical_device.handle, &mut tmp_feat)
+            };
+
+            create_info = create_info.push_next(&mut vk11_features);
+            create_info = create_info.push_next(&mut vk12_features);
+
+            if instance.vk_version >= vk::API_VERSION_1_3 {
+                create_info = create_info.push_next(&mut vk13_features);
+            }
         }
 
         let handle = unsafe {

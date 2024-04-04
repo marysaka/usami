@@ -172,19 +172,20 @@ fn main() -> VkResult<()> {
         ImageViewCreateFlags::empty(),
     )?;
 
-    let sampler_create_info = SamplerCreateInfo::default()
-        .mag_filter(Filter::NEAREST)
-        .min_filter(Filter::NEAREST)
-        .mipmap_mode(SamplerMipmapMode::NEAREST)
-        .address_mode_u(SamplerAddressMode::REPEAT)
-        .address_mode_v(SamplerAddressMode::REPEAT)
-        .address_mode_w(SamplerAddressMode::REPEAT)
-        .max_anisotropy(1.0)
-        .border_color(BorderColor::FLOAT_TRANSPARENT_BLACK)
-        .compare_op(CompareOp::NEVER);
-
-    // TODO: Sampler abstraction
-    let sampler = unsafe { device.handle.create_sampler(&sampler_create_info, None)? };
+    let sampler = UsamiDevice::create_sampler(
+        &device,
+        "sampler".into(),
+        SamplerCreateInfo::default()
+            .mag_filter(Filter::NEAREST)
+            .min_filter(Filter::NEAREST)
+            .mipmap_mode(SamplerMipmapMode::NEAREST)
+            .address_mode_u(SamplerAddressMode::REPEAT)
+            .address_mode_v(SamplerAddressMode::REPEAT)
+            .address_mode_w(SamplerAddressMode::REPEAT)
+            .max_anisotropy(1.0)
+            .border_color(BorderColor::FLOAT_TRANSPARENT_BLACK)
+            .compare_op(CompareOp::NEVER),
+    )?;
 
     unsafe {
         device.handle.update_descriptor_sets(
@@ -195,7 +196,7 @@ fn main() -> VkResult<()> {
                 .image_info(&[DescriptorImageInfo::default()
                     .image_layout(ImageLayout::GENERAL)
                     .image_view(white_image_view.handle)
-                    .sampler(sampler)])],
+                    .sampler(sampler.handle)])],
             &[],
         );
     }
@@ -423,10 +424,6 @@ fn main() -> VkResult<()> {
     )?;
     fence.wait(u64::MAX)?;
     fence.reset()?;
-
-    unsafe {
-        device.handle.destroy_sampler(sampler, None);
-    }
 
     let res = presentation.buffer_readback.device_memory.read_to_vec()?;
 

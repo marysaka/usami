@@ -3,7 +3,8 @@ use std::sync::Arc;
 use ash::{
     prelude::*,
     vk::{
-        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, MemoryPropertyFlags,
+        Buffer, BufferCreateFlags, BufferCreateInfo, BufferUsageFlags, BufferView,
+        BufferViewCreateFlags, BufferViewCreateInfo, DeviceSize, Format, MemoryPropertyFlags,
         SharingMode,
     },
     Device,
@@ -54,11 +55,55 @@ impl UsamiBuffer {
 
         Ok(())
     }
+
+    pub fn create_view(
+        &self,
+        name: String,
+        flags: BufferViewCreateFlags,
+        format: Format,
+        offset: DeviceSize,
+        range: DeviceSize,
+    ) -> VkResult<UsamiBufferView> {
+        UsamiDevice::create_buffer_view(
+            &self.device,
+            name,
+            BufferViewCreateInfo::default()
+                .flags(flags)
+                .buffer(self.handle)
+                .format(format)
+                .offset(offset)
+                .range(range),
+        )
+    }
 }
 
 impl Drop for UsamiBuffer {
     fn drop(&mut self) {
         unsafe { self.device.handle.destroy_buffer(self.handle, None) }
+    }
+}
+
+pub struct UsamiBufferView {
+    device: Arc<UsamiDevice>,
+    pub handle: BufferView,
+}
+
+impl UsamiBufferView {
+    pub fn new(device: &Arc<UsamiDevice>, create_info: BufferViewCreateInfo) -> VkResult<Self> {
+        let vk_device: &Device = &device.handle;
+
+        let handle = unsafe { vk_device.create_buffer_view(&create_info, None)? };
+
+        Ok(Self {
+            device: device.clone(),
+            handle,
+        })
+    }
+}
+
+impl Drop for UsamiBufferView {
+    fn drop(&mut self) {
+        unsafe { self.device.handle.destroy_buffer_view(self.handle, None) }
     }
 }
 
@@ -93,7 +138,7 @@ impl UsamiDevice {
         flags: BufferCreateFlags,
         sharing_mode: SharingMode,
         usage: BufferUsageFlags,
-        size: u64,
+        size: DeviceSize,
         memory_flags: MemoryPropertyFlags,
     ) -> VkResult<UsamiBuffer> {
         let queue_family_indices = &[device.vk_queue_index];
@@ -108,5 +153,17 @@ impl UsamiDevice {
         device.set_debug_name(name, buffer.handle)?;
 
         Ok(buffer)
+    }
+
+    pub fn create_buffer_view(
+        device: &Arc<UsamiDevice>,
+        name: String,
+        create_info: BufferViewCreateInfo,
+    ) -> VkResult<UsamiBufferView> {
+        let buffer_view = UsamiBufferView::new(device, create_info)?;
+
+        device.set_debug_name(name, buffer_view.handle)?;
+
+        Ok(buffer_view)
     }
 }

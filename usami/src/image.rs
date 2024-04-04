@@ -7,7 +7,7 @@ use ash::{
         Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceLayers,
         ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView,
         ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType, MemoryPropertyFlags,
-        SampleCountFlags, SharingMode,
+        SampleCountFlags, Sampler, SamplerCreateInfo, SharingMode,
     },
     Device,
 };
@@ -122,6 +122,28 @@ impl Drop for UsamiImageView {
     }
 }
 
+pub struct UsamiSampler {
+    device: Arc<UsamiDevice>,
+    pub handle: Sampler,
+}
+
+impl UsamiSampler {
+    pub fn new(device: &Arc<UsamiDevice>, create_info: SamplerCreateInfo) -> VkResult<Self> {
+        let handle = unsafe { device.handle.create_sampler(&create_info, None)? };
+
+        Ok(Self {
+            device: device.clone(),
+            handle,
+        })
+    }
+}
+
+impl Drop for UsamiSampler {
+    fn drop(&mut self) {
+        unsafe { self.device.handle.destroy_sampler(self.handle, None) }
+    }
+}
+
 impl UsamiDevice {
     pub fn create_image(
         device: &Arc<UsamiDevice>,
@@ -146,6 +168,18 @@ impl UsamiDevice {
         device.set_debug_name(name, image_view.handle)?;
 
         Ok(image_view)
+    }
+
+    pub fn create_sampler(
+        device: &Arc<UsamiDevice>,
+        name: String,
+        create_info: SamplerCreateInfo,
+    ) -> VkResult<UsamiSampler> {
+        let image = UsamiSampler::new(device, create_info)?;
+
+        device.set_debug_name(name, image.handle)?;
+
+        Ok(image)
     }
 
     pub fn import_image(
