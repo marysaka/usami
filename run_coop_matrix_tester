@@ -19,13 +19,14 @@ glslangValidator -g0 --target-env vulkan1.0 $glsl_path -o $shader_output_dir/out
                              --group-count-x "$group_size_x"                             \
                              --group-count-y "$group_size_y"                             \
                              --group-count-z "$group_size_z"                             \
-                             --device-extension "VK_NV_cooperative_matrix"               \
+                             --device-extension "VK_KHR_cooperative_matrix"              \
                              --vk-version 4206592                                        \
                              --input-as-buffer true                                      \
                              --input-buffer-file "$input_data"                           \
                              --output-buffer-file "$shader_output_dir/output_buffer.bin" \
 
-(hexdump -v -C $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
+(hexdump -e '32/1 " %02X" "\n"' $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
+#(hexdump -v -C $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
 
 if [ "$TERM_PROGRAM" = "vscode" ]; then
   code $shader_output_dir/output_buffer.hex

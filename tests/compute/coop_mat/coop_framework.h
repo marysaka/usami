@@ -26,10 +26,10 @@
 // Operations
 #define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
   coopmat<input_type, gl_ScopeSubgroup, rows, columns, usage>
-#define coopFrameworkMatLoad(dst, src, stride, byte_size, column_major)        \
-  coopMatLoad(dst, src, stride, byte_size, column_major)
-#define coopFrameworkMatStore(src, dst, stride, byte_size, column_major)       \
-  coopMatStore(src, dst, stride, byte_size, column_major)
+#define coopFrameworkMatLoad(dst, src, element, stride, column_major)        \
+  coopMatLoad(dst, src, element, stride, column_major)
+#define coopFrameworkMatStore(src, dst, element, stride, column_major)       \
+  coopMatStore(src, dst, element, stride, column_major)
 #define coopFrameworkMatMulAdd(a, b, c) coopMatMulAdd(a, b, c)
 
 #else
@@ -61,9 +61,9 @@
 #define DEF_COOP_MAT_TYPE(input_type, bit_size, rows, columns, usage)          \
   icoopmatNV<bit_size, gl_ScopeSubgroup, rows, columns>
 #endif
-#define coopFrameworkMatLoad(dst, src, stride, byte_size, column_major)        \
-  coopMatLoadNV(dst, src, stride, byte_size, column_major)
-#define coopFrameworkMatStore(src, dst, stride, byte_size, column_major)       \
-  coopMatStoreNV(src, dst, stride, byte_size, column_major)
+#define coopFrameworkMatLoad(dst, src, element, stride, column_major)        \
+  coopMatLoadNV(dst, src, element, stride, column_major)
+#define coopFrameworkMatStore(src, dst, element, stride, column_major)       \
+  coopMatStoreNV(src, dst, element, stride, column_major)
 #define coopFrameworkMatMulAdd(a, b, c) coopMatMulAddNV(a, b, c)
 #endif

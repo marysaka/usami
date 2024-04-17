@@ -12,7 +12,7 @@
 #define COOP_TYPE_F 2
 
 // Select if KHR ext should be used
-// #define USE_KHR_EXT
+#define USE_KHR_EXT
 
 // Indicate the type of coop matrix
 #define COOP_TYPE COOP_TYPE_F
@@ -53,6 +53,10 @@
   DEF_COOP_MAT_TYPE(inputTypeD, D_BIT_SIZE, M_SIZE, N_SIZE,                    \
                     MATRIX_USE_ACCUMULATOR)
 
+#define coopmatTypeF                                                           \
+  DEF_COOP_MAT_TYPE(float32_t, 32, M_SIZE, N_SIZE,                     \
+                    MATRIX_USE_ACCUMULATOR)
+
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 layout(set = 0, binding = 0) buffer d_blob { inputTypeD d_blob_data[]; };
 
@@ -63,6 +67,7 @@ layout(std430, set = 0, binding = 1) readonly buffer blob {
 };
 
 shared inputTypeA tmp_a[M_SIZE * K_SIZE];
+shared inputTypeA tmp_a_out[M_SIZE * K_SIZE];
 shared inputTypeB tmp_b[K_SIZE * N_SIZE];
 shared inputTypeC tmp_c[M_SIZE * N_SIZE];
 shared inputTypeD tmp_d[M_SIZE * N_SIZE];
@@ -70,30 +75,58 @@ shared inputTypeD tmp_d[M_SIZE * N_SIZE];
 void main() {
   const int lx = int(gl_LocalInvocationID.x);
 
-  tmp_a[lx] = a_blob_data[lx];
-  tmp_b[lx] = b_blob_data[lx];
-  tmp_c[lx] = c_blob_data[lx];
+  if (lx == 0) {
+    for (int i = 0; i < M_SIZE * K_SIZE; i++) {
+      tmp_a[i] = a_blob_data[i];
+    }
+  }
+
+  // tmp_a[lx] = a_blob_data[lx];
+  // tmp_b[lx] = b_blob_data[lx];
+  // tmp_c[lx] = c_blob_data[lx];
 
   barrier();
 
   // LOAD
   coopmatTypeA a;
   coopFrameworkMatLoad(a, tmp_a, 0, A_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+  coopFrameworkMatStore(a, tmp_a_out, 0, A_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
 
-  coopmatTypeB b;
-  coopFrameworkMatLoad(b, tmp_b, 0, B_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+  // coopmatTypeB b;
+  // coopFrameworkMatLoad(b, tmp_b, 0, B_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
 
-  coopmatTypeC c;
-  coopFrameworkMatLoad(c, tmp_c, 0, C_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+  // coopmatTypeC c;
+  // coopFrameworkMatLoad(c, tmp_c, 0, C_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
 
   // COOP_MAT_MUL_ADD
-  coopmatTypeD d = coopFrameworkMatMulAdd(a, b, c);
+  // coopmatTypeD d = coopFrameworkMatMulAdd(a, b, c);
 
   // STORE
-  coopFrameworkMatStore(d, tmp_d, 0, D_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+  // coopFrameworkMatStore(d, tmp_d, 0, D_BIT_SIZE / 8, MATRIX_LAYOUT_ROW_MAJOR);
+
   barrier();
 
-  d_blob_data[lx] = tmp_d[lx];
+  // int i;
+
+  // for (i = 0; i < a.length(); i++)
+  // {
+  //   d_blob_data[lx + 32 * i] = a[i];
+  // }
+
+  // d_blob_data[lx + 32 * i] = float16_t(lx);
+
+  // d_blob_data[lx] = tmp_d[lx];
+  // d_blob_data[lx + 32 * 0] = a[0];
+  // d_blob_data[lx + 32 * 1] = a[1];
+  // d_blob_data[lx + 32 * 2] = a[2];
+  // d_blob_data[lx + 32 * 3] = a[3];
+  // d_blob_data[lx + 32 * 4] = float16_t(lx);
+
+  if (lx == 0) {
+    for (int i = 0; i < M_SIZE * K_SIZE; i++) {
+      d_blob_data[i] = tmp_a_out[i];
+    }
+  }
 }
 
 // m_size: 16, n_size: 16, k_size: 16, a_type: FLOAT16, b_type: FLOAT16, c_type: FLOAT16, result_type: FLOAT16

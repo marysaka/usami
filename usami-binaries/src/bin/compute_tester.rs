@@ -128,6 +128,10 @@ fn main() -> VkResult<()> {
             ty: vk::DescriptorType::STORAGE_IMAGE,
             descriptor_count: 1,
         },
+        vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::STORAGE_BUFFER,
+            descriptor_count: 1,
+        },
     ];
 
     let descriptor_pool_create_info = DescriptorPoolCreateInfo::default()
@@ -156,6 +160,11 @@ fn main() -> VkResult<()> {
             .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
             .descriptor_count(1)
             .stage_flags(ShaderStageFlags::COMPUTE),
+        vk::DescriptorSetLayoutBinding::default()
+            .binding(3)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(ShaderStageFlags::COMPUTE),
     ];
     let descriptor_set_layout = UsamiDevice::create_descriptor_set_layout(
         &device,
@@ -179,6 +188,20 @@ fn main() -> VkResult<()> {
     let uniform_block = UsamiDevice::create_buffer(
         &device,
         "uniform_block".into(),
+        BufferCreateFlags::empty(),
+        SharingMode::EXCLUSIVE,
+        if args.input_as_buffer {
+            BufferUsageFlags::STORAGE_BUFFER
+        } else {
+            BufferUsageFlags::UNIFORM_BUFFER
+        },
+        &uniform_block_data,
+    )?;
+
+
+    let uniform_block2 = UsamiDevice::create_buffer(
+        &device,
+        "uniform_block2".into(),
         BufferCreateFlags::empty(),
         SharingMode::EXCLUSIVE,
         if args.input_as_buffer {
@@ -272,6 +295,14 @@ fn main() -> VkResult<()> {
                     .image_info(&[DescriptorImageInfo::default()
                         .image_layout(ImageLayout::GENERAL)
                         .image_view(output_image_view.handle)]),
+                WriteDescriptorSet::default()
+                    .dst_set(descriptor_sets[0].handle)
+                    .dst_binding(3)
+                    .descriptor_type(input_desc_type)
+                    .buffer_info(&[DescriptorBufferInfo::default()
+                        .buffer(uniform_block2.handle)
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)]),
             ],
             &[],
         );
