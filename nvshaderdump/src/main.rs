@@ -7,6 +7,10 @@ use std::{
 use argh::FromArgs;
 use reqwest::multipart::Part;
 
+const NVDA_MAGIC: u32 = 0x4144564e;
+const NVVM_MAGIC: u32 = 0x4d56564e;
+const NVUC_MAGIC: u32 = 0x6375564e;
+
 #[derive(FromArgs, PartialEq, Debug)]
 /// Top-level command.
 struct Args {
@@ -54,13 +58,13 @@ struct RemoteSubCommand {
     output_directory: Option<PathBuf>,
 }
 
-/// Locally deserialize a NVVM container.
+/// Locally deserialize a container.
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "local")]
 struct LocalSubCommand {
-    /// the path to the NVVM file to deserialize.
+    /// the path to the file to deserialize.
     #[argh(positional)]
-    nvvm_file_path: PathBuf,
+    file_path: PathBuf,
 
     /// the optional output directory to store the shader code and header.
     #[argh(option)]
@@ -144,7 +148,7 @@ pub fn find_shader_data_offsets(
     Option<ShaderBlobInfo>,
 )> {
     let magic = u32::from_ne_bytes(nvuc_container[0..4].try_into().unwrap());
-    assert!(magic == 0x6375564e);
+    assert!(magic == NVUC_MAGIC);
 
     let section_count = u16::from_ne_bytes(nvuc_container[8..10].try_into().unwrap()) as usize;
 
@@ -274,11 +278,18 @@ async fn main() {
         } => {
             let mut data = Vec::new();
 
-            let mut file = File::open(&args.nvvm_file_path).unwrap();
+            let mut file = File::open(&args.file_path).unwrap();
 
             file.read_to_end(&mut data).unwrap();
 
-            data.drain(0..4);
+            let mut magic = u32::from_ne_bytes(data[0..4].try_into().unwrap());
+
+            // If the file isn't an NVUc let's find it
+            while magic != NVUC_MAGIC {
+                assert!(magic == NVDA_MAGIC || magic == NVVM_MAGIC);
+                data.drain(0..4);
+                magic = u32::from_ne_bytes(data[0..4].try_into().unwrap());
+            }
 
             (Some(data), args.output_directory)
         }
