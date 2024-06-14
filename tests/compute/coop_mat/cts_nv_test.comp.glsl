@@ -14,34 +14,102 @@
 #define COOP_TYPE_F 2
 
 // Select if KHR ext should be used
-#define USE_KHR_EXT
+// #define USE_KHR_EXT
 
 // Indicate the type of coop matrix
-#define COOP_TYPE COOP_TYPE_F
+#define COOP_TYPE COOP_TYPE_U
 
 #include "coop_framework.h"
 
-// Shader configuration
-const int ROW = 16;
-const int COL = 8;
+// MxNxK (A/B/C/D)
+// MxK (A)
+// KxN (B)
+// MxN (C)
+// MxN (D)
 
-layout(set=0, binding=0) buffer Output { float16_t x[]; } outputO;
+// 16x16x16 (F16/F16/F16/F16)
+// 16x16 (F16)
+// 16x16 (F16)
+// 16x16 (F16)
+// 16x16 (F16)
+
+// 16x8x8 (F16/F16/F16/F16)
+// 16x8 (F16)
+// 8x8 (F16)
+// 16x8 (F16)
+// 16x8 (F16)
+
+// 16x16x16 (F16/F16/F32/F32)
+// 16x16 (F16)
+// 16x16 (F16)
+// 16x16 (F32)
+// 16x16 (F32)
+
+// 16x8x16 (F16/F16/F32/F32)
+// 16x16 (F16)
+// 16x8 (F16)
+// 16x8 (F32)
+// 16x8 (F32)
+
+// 16x8x8 (F16/F16/F32/F32)
+// 16x8 (F16)
+// 8x8 (F16)
+// 16x8 (F32)
+// 16x8 (F32)
+
+// 16x16x32 (U8/U8/U32/U32)
+// 16x32 (U8)
+// 32x16 (U8)
+// 16x16 (U32)
+// 16x16 (U32)
+
+
+// 16x16x32 (S8/S8/S32/S32)
+// 16x32 (S8)
+// 32x16 (S8)
+// 16x16 (S32)
+// 16x16 (S32)
+
+// 16x8x32 (U8/U8/U32/U32)
+// 16x32 (U8)
+// 32x8 (U8)
+// 16x8 (U32)
+// 16x8 (U32)
+
+// 16x8x32 (S8/S8/S32/S32)
+// 16x32 (S8)
+// 32x8 (S8)
+// 16x8 (S32)
+// 16x8 (S32)
+
+// Shader configuration
+
+const int ROW = 32;
+const int COL = 8;
+#define elementType uint8_t
+const int BIT_SIZE = 8;
+// #define matrix_layout_major MATRIX_LAYOUT_COLUMN_MAJOR
+#define matrix_layout_major MATRIX_LAYOUT_ROW_MAJOR
+
+layout(local_size_x_id = 0, local_size_y_id = 1, local_size_z = 1) in;
+
+layout(set=0, binding=0) buffer Output { elementType x[]; } outputO;
 layout(set=0, binding=1) buffer CustomStride { uint stride[]; } customStride;
 layout(set=0, binding=3) buffer CustomElement { uint element[]; } customElement;
 
-#define coopmatType DEF_COOP_MAT_TYPE(float16_t, 16, ROW, COL, MATRIX_USE_ACCUMULATOR)
+#define coopmatType DEF_COOP_MAT_TYPE(elementType, BIT_SIZE, ROW, COL, MATRIX_USE_ACCUMULATOR)
 
 void main()
 {
    uint element3 = customElement.element[0];
    uint strideO = customStride.stride[0]; //+ customStride.stride[1];
    coopmatType matO = coopmatType(1.0);
-   matO[0] = 1.0hf;
-   matO[1] = 2.0hf;
-   matO[2] = 3.0hf;
-   matO[3] = 4.0hf;
 
-   // coopFrameworkMatStore(matO, outputO.x, element3, strideO, MATRIX_LAYOUT_ROW_MAJOR);
-   coopFrameworkMatStore(matO, outputO.x, 0, 2, MATRIX_LAYOUT_ROW_MAJOR);
-   // coopFrameworkMatStore(matO, outputO.x, element3, strideO, MATRIX_LAYOUT_COLUMN_MAJOR);
+   //for (int i = 0; i < matO.length(); i++) {
+   //   matO[i] = elementType(i);
+   //}
+
+   barrier();
+
+   coopFrameworkMatStore(matO, outputO.x, element3, strideO, matrix_layout_major);
 }

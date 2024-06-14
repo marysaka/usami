@@ -25,7 +25,7 @@ glslangValidator -g0 --target-env vulkan1.0 $glsl_path -o $shader_output_dir/out
                              --input-buffer-file "$input_data"                           \
                              --output-buffer-file "$shader_output_dir/output_buffer.bin" \
 
-(hexdump -e '32/1 " %02X" "\n"' $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
+(hexdump -v -e '32/1 " %02X" "\n"' $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
 #(hexdump -v -C $shader_output_dir/output_buffer.bin &> $shader_output_dir/output_buffer.hex) || true
 
 if [ "$TERM_PROGRAM" = "vscode" ]; then
