@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 argh.workspace = true
 hyper.workspace = true
+lzma-rs.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 zstd.workspace = true

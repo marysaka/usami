@@ -5,11 +5,14 @@ use std::{
 };
 
 use argh::FromArgs;
+use lzma_rs::decompress::Options;
 use reqwest::multipart::Part;
 
 const NVDA_MAGIC: u32 = 0x4144564e;
 const NVVM_MAGIC: u32 = 0x4d56564e;
 const NVUC_MAGIC: u32 = 0x6375564e;
+const CPKV_MAGIC: u32 = 0x564b5043;
+const ZSTD_MAGIC: u32 = 0xfd2fb528;
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Top-level command.
@@ -110,22 +113,57 @@ async fn get_shader_binary(args: &RemoteSubCommand) -> Vec<u8> {
     result
 }
 
-pub fn find_zstd_header(bin: &[u8]) -> Option<usize> {
+pub fn find_u32_magic(bin: &[u8], offset: usize, magic: u32) -> Option<usize> {
     if bin.len() < 4 {
         return None;
     }
 
-    let header = 0xfd2fb528_u32.to_ne_bytes();
-    for i in 0..(bin.len() - 3) {
+    let header = magic.to_ne_bytes();
+    for i in offset..(bin.len() - 3) {
         if bin[i..(i + 4)] == header {
             return Some(i);
         }
     }
     None
 }
-pub fn get_zstd_shader_blob(bin: &[u8]) -> Option<Vec<u8>> {
-    if let Some(offset) = find_zstd_header(bin) {
-        Some(zstd::stream::decode_all(&bin[offset..]).unwrap())
+
+pub fn get_shader_blob(mut bin: &[u8]) -> Option<Vec<u8>> {
+    let base_offset = find_u32_magic(bin, 0, CPKV_MAGIC)?;
+    bin = &bin[base_offset..];
+
+    // Grab the compressed size
+    let _compressed_size = u32::from_ne_bytes(bin[0x20..0x24].try_into().unwrap());
+
+    // Skip to the next container
+    bin = &bin[0x28..];
+
+    let uncompressed_size = u32::from_ne_bytes(bin[0..4].try_into().unwrap());
+    bin = &bin[4..];
+
+    // We are now on the compressed stream
+
+    let magic = u32::from_ne_bytes(bin[0..4].try_into().unwrap());
+
+    // Check for LZMA1
+    if (magic & 0xFF) == 0x5d {
+        let mut output_data: Vec<u8> = Vec::new();
+
+        lzma_rs::lzma_decompress_with_options(
+            &mut bin,
+            &mut output_data,
+            &Options {
+                unpacked_size: lzma_rs::decompress::UnpackedSize::UseProvided(Some(u64::from(
+                    uncompressed_size,
+                ))),
+                memlimit: None,
+                allow_incomplete: false,
+            },
+        )
+        .unwrap();
+
+        Some(output_data)
+    } else if magic == ZSTD_MAGIC {
+        Some(zstd::stream::decode_all(bin).unwrap())
     } else {
         None
     }
@@ -262,12 +300,12 @@ async fn main() {
                 file.write_all(&shader_binary).unwrap();
             }
 
-            if let Some(mut data) = get_zstd_shader_blob(&shader_binary) {
+            if let Some(mut data) = get_shader_blob(&shader_binary) {
                 data.drain(0..8);
 
                 (Some(data), args.output_directory)
             } else {
-                eprintln!("ZSTD header not found!");
+                eprintln!("Shader binary not found!");
 
                 (None, args.output_directory)
             }
