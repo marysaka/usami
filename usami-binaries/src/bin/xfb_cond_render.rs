@@ -1,6 +1,8 @@
 use std::ffi::CString;
 
 use ash::{
+    ext::conditional_rendering::Device as ConditionalRendering,
+    ext::transform_feedback::Device as TransformFeedback,
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,
@@ -22,7 +24,10 @@ use ash::{
     },
 };
 use usami::{offset_of, UsamiDevice, UsamiInstance, UsamiPresentation};
-use usami_binaries::ash_ext::{ConditionalRendering, TransformFeedback};
+use usami_binaries::ash_ext::{
+    begin_conditional_rendering, begin_transform_feedback, bind_transform_feedback_buffers,
+    end_conditional_rendering, end_transform_feedback,
+};
 
 #[derive(Clone, Debug, Copy)]
 #[repr(C)]
@@ -521,7 +526,8 @@ fn main() -> VkResult<()> {
                 for xfb_stream in 0u32..XFB_STREAM_COUNT as u32 {
                     let xfb_offset = xfb_stream * XFB_RAW_SIZE as u32;
 
-                    xfb.bind_transform_feedback_buffers(
+                    bind_transform_feedback_buffers(
+                        &xfb,
                         command_buffer.handle,
                         xfb_stream,
                         &[xfb_buffer.handle],
@@ -538,14 +544,15 @@ fn main() -> VkResult<()> {
 
                     conditional_rendering_info.offset =
                         ((std::mem::size_of::<u32>() as u32) * (xfb_stream % 2)) as vk::DeviceSize;
-                    cond_render.begin_conditional_rendering(
+                    begin_conditional_rendering(
+                        &cond_render,
                         command_buffer.handle,
                         &conditional_rendering_info,
                     );
-                    xfb.begin_transform_feedback(command_buffer.handle, 0, &[], &[]);
+                    begin_transform_feedback(&xfb, command_buffer.handle, 0, &[], &[]);
                     record_draw(vk_device, 1);
-                    xfb.end_transform_feedback(command_buffer.handle, 0, &[], &[]);
-                    cond_render.end_conditional_rendering(command_buffer.handle);
+                    end_transform_feedback(&xfb, command_buffer.handle, 0, &[], &[]);
+                    end_conditional_rendering(&cond_render, command_buffer.handle);
                 }
 
                 vk_device.cmd_end_render_pass(command_buffer.handle);

@@ -1,7 +1,9 @@
 use ash::prelude::VkResult;
-use ash::{vk, Device, Entry, Instance};
-use std::ffi::CStr;
-use std::mem;
+use ash::vk;
+
+use ash::ext::conditional_rendering::Device as ConditionalRendering;
+use ash::ext::transform_feedback::Device as TransformFeedback;
+use ash::nv::cooperative_matrix::Instance as NvCooperativeMatrix;
 
 // Copy paste from ash as it's private
 pub(crate) unsafe fn read_into_defaulted_vector<
@@ -32,223 +34,147 @@ where
 // Missing extensions definition goes here for now
 // TODO: upstream this
 
-#[derive(Clone)]
-pub struct TransformFeedback {
-    handle: vk::Device,
-    fp: vk::ExtTransformFeedbackFn,
+#[inline]
+pub unsafe fn get_physical_device_cooperative_matrix_properties_nv(
+    instance: &NvCooperativeMatrix,
+    physical_device: vk::PhysicalDevice,
+) -> VkResult<Vec<vk::CooperativeMatrixPropertiesNV<'_>>> {
+    read_into_defaulted_vector(|count, data| {
+        (instance
+            .fp()
+            .get_physical_device_cooperative_matrix_properties_nv)(
+            physical_device, count, data
+        )
+    })
 }
 
-impl TransformFeedback {
-    pub fn new(instance: &Instance, device: &Device) -> Self {
-        let handle = device.handle();
-        let fp = vk::ExtTransformFeedbackFn::load(|name| unsafe {
-            mem::transmute(instance.get_device_proc_addr(handle, name.as_ptr()))
-        });
-        Self { handle, fp }
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBeginQueryIndexedEXT.html>
-    #[inline]
-    pub unsafe fn begin_query_indexed(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        query_pool: vk::QueryPool,
-        query: u32,
-        flags: vk::QueryControlFlags,
-        index: u32,
-    ) {
-        (self.fp.cmd_begin_query_indexed_ext)(command_buffer, query_pool, query, flags, index);
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBeginTransformFeedbackEXT.html>
-    #[inline]
-    pub unsafe fn begin_transform_feedback(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        first_counter_buffer: u32,
-        counter_buffers: &[vk::Buffer],
-        counter_buffer_offsets: &[vk::DeviceSize],
-    ) {
-        assert_eq!(counter_buffers.len(), counter_buffer_offsets.len());
-
-        (self.fp.cmd_begin_transform_feedback_ext)(
-            command_buffer,
-            first_counter_buffer,
-            counter_buffers.len() as u32,
-            counter_buffers.as_ptr(),
-            counter_buffer_offsets.as_ptr(),
-        );
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindTransformFeedbackBuffersEXT.html>
-    #[inline]
-    pub unsafe fn bind_transform_feedback_buffers(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        first_binding: u32,
-        buffers: &[vk::Buffer],
-        offsets: &[vk::DeviceSize],
-        sizes: &[vk::DeviceSize],
-    ) {
-        assert_eq!(buffers.len(), offsets.len());
-        assert_eq!(offsets.len(), sizes.len());
-
-        (self.fp.cmd_bind_transform_feedback_buffers_ext)(
-            command_buffer,
-            first_binding,
-            buffers.len() as u32,
-            buffers.as_ptr(),
-            offsets.as_ptr(),
-            sizes.as_ptr(),
-        );
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdDrawIndirectByteCountEXT.html>
-    #[inline]
-    pub unsafe fn draw_indirect_byte_count(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        instance_count: u32,
-        first_instance: u32,
-        counter_buffer: vk::Buffer,
-        counter_buffer_offset: vk::DeviceSize,
-        counter_offset: u32,
-        vertex_stride: u32,
-    ) {
-        (self.fp.cmd_draw_indirect_byte_count_ext)(
-            command_buffer,
-            instance_count,
-            first_instance,
-            counter_buffer,
-            counter_buffer_offset,
-            counter_offset,
-            vertex_stride,
-        );
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdEndQueryIndexedEXT.html>
-    #[inline]
-    pub unsafe fn end_query_indexed(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        query_pool: vk::QueryPool,
-        query: u32,
-        index: u32,
-    ) {
-        (self.fp.cmd_end_query_indexed_ext)(command_buffer, query_pool, query, index);
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdEndTransformFeedbackEXT.html>
-    #[inline]
-    pub unsafe fn end_transform_feedback(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        first_counter_buffer: u32,
-        counter_buffers: &[vk::Buffer],
-        counter_buffer_offsets: &[vk::DeviceSize],
-    ) {
-        assert_eq!(counter_buffers.len(), counter_buffer_offsets.len());
-
-        (self.fp.cmd_end_transform_feedback_ext)(
-            command_buffer,
-            first_counter_buffer,
-            counter_buffers.len() as u32,
-            counter_buffers.as_ptr(),
-            counter_buffer_offsets.as_ptr(),
-        );
-    }
-
-    pub const NAME: &'static CStr = vk::ExtTransformFeedbackFn::NAME;
-
-    #[inline]
-    pub fn fp(&self) -> &vk::ExtTransformFeedbackFn {
-        &self.fp
-    }
-
-    #[inline]
-    pub fn device(&self) -> vk::Device {
-        self.handle
-    }
+#[inline]
+pub unsafe fn begin_conditional_rendering(
+    instance: &ConditionalRendering,
+    command_buffer: vk::CommandBuffer,
+    conditional_rendering_begin: &vk::ConditionalRenderingBeginInfoEXT,
+) {
+    (instance.fp().cmd_begin_conditional_rendering_ext)(
+        command_buffer,
+        conditional_rendering_begin,
+    );
 }
 
-#[derive(Clone)]
-pub struct ConditionalRendering {
-    handle: vk::Device,
-    fp: vk::ExtConditionalRenderingFn,
+#[inline]
+pub unsafe fn end_conditional_rendering(
+    instance: &ConditionalRendering,
+    command_buffer: vk::CommandBuffer,
+) {
+    (instance.fp().cmd_end_conditional_rendering_ext)(command_buffer);
 }
 
-impl ConditionalRendering {
-    pub fn new(instance: &Instance, device: &Device) -> Self {
-        let handle = device.handle();
-        let fp = vk::ExtConditionalRenderingFn::load(|name| unsafe {
-            mem::transmute(instance.get_device_proc_addr(handle, name.as_ptr()))
-        });
-        Self { handle, fp }
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBeginConditionalRenderingEXT.html>
-    #[inline]
-    pub unsafe fn begin_conditional_rendering(
-        &self,
-        command_buffer: vk::CommandBuffer,
-        conditional_rendering_begin: &vk::ConditionalRenderingBeginInfoEXT,
-    ) {
-        (self.fp.cmd_begin_conditional_rendering_ext)(command_buffer, conditional_rendering_begin);
-    }
-
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdEndConditionalRenderingEXT.html>
-    #[inline]
-    pub unsafe fn end_conditional_rendering(&self, command_buffer: vk::CommandBuffer) {
-        (self.fp.cmd_end_conditional_rendering_ext)(command_buffer);
-    }
-
-    pub const NAME: &'static CStr = vk::ExtConditionalRenderingFn::NAME;
-
-    #[inline]
-    pub fn fp(&self) -> &vk::ExtConditionalRenderingFn {
-        &self.fp
-    }
-
-    #[inline]
-    pub fn device(&self) -> vk::Device {
-        self.handle
-    }
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBeginQueryIndexedEXT.html>
+#[inline]
+pub unsafe fn begin_query_indexed(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    query_pool: vk::QueryPool,
+    query: u32,
+    flags: vk::QueryControlFlags,
+    index: u32,
+) {
+    (instance.fp().cmd_begin_query_indexed_ext)(command_buffer, query_pool, query, flags, index);
 }
 
-/// <https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VK_NV_cooperative_matrix.html>
-#[derive(Clone)]
-pub struct NvCooperativeMatrix {
-    fp: vk::NvCooperativeMatrixFn,
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBeginTransformFeedbackEXT.html>
+#[inline]
+pub unsafe fn begin_transform_feedback(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    first_counter_buffer: u32,
+    counter_buffers: &[vk::Buffer],
+    counter_buffer_offsets: &[vk::DeviceSize],
+) {
+    assert_eq!(counter_buffers.len(), counter_buffer_offsets.len());
+
+    (instance.fp().cmd_begin_transform_feedback_ext)(
+        command_buffer,
+        first_counter_buffer,
+        counter_buffers.len() as u32,
+        counter_buffers.as_ptr(),
+        counter_buffer_offsets.as_ptr(),
+    );
 }
 
-impl NvCooperativeMatrix {
-    pub fn new(entry: &Entry, instance: &Instance) -> Self {
-        let handle = instance.handle();
-        let fp = vk::NvCooperativeMatrixFn::load(|name| unsafe {
-            mem::transmute(entry.get_instance_proc_addr(handle, name.as_ptr()))
-        });
-        Self { fp }
-    }
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindTransformFeedbackBuffersEXT.html>
+#[inline]
+pub unsafe fn bind_transform_feedback_buffers(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    first_binding: u32,
+    buffers: &[vk::Buffer],
+    offsets: &[vk::DeviceSize],
+    sizes: &[vk::DeviceSize],
+) {
+    assert_eq!(buffers.len(), offsets.len());
+    assert_eq!(offsets.len(), sizes.len());
 
-    /// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkGetPhysicalDeviceCooperativeMatrixPropertiesNV.html>
-    #[inline]
-    pub unsafe fn get_physical_device_cooperative_matrix_properties(
-        &self,
-        physical_device: vk::PhysicalDevice,
-    ) -> VkResult<Vec<vk::CooperativeMatrixPropertiesNV<'_>>> {
-        read_into_defaulted_vector(|count, data| {
-            (self.fp.get_physical_device_cooperative_matrix_properties_nv)(
-                physical_device,
-                count,
-                data,
-            )
-        })
-    }
+    (instance.fp().cmd_bind_transform_feedback_buffers_ext)(
+        command_buffer,
+        first_binding,
+        buffers.len() as u32,
+        buffers.as_ptr(),
+        offsets.as_ptr(),
+        sizes.as_ptr(),
+    );
+}
 
-    pub const NAME: &'static CStr = vk::NvCooperativeMatrixFn::NAME;
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdDrawIndirectByteCountEXT.html>
+#[inline]
+pub unsafe fn draw_indirect_byte_count(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    instance_count: u32,
+    first_instance: u32,
+    counter_buffer: vk::Buffer,
+    counter_buffer_offset: vk::DeviceSize,
+    counter_offset: u32,
+    vertex_stride: u32,
+) {
+    (instance.fp().cmd_draw_indirect_byte_count_ext)(
+        command_buffer,
+        instance_count,
+        first_instance,
+        counter_buffer,
+        counter_buffer_offset,
+        counter_offset,
+        vertex_stride,
+    );
+}
 
-    #[inline]
-    pub fn fp(&self) -> &vk::NvCooperativeMatrixFn {
-        &self.fp
-    }
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdEndQueryIndexedEXT.html>
+#[inline]
+pub unsafe fn end_query_indexed(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    query_pool: vk::QueryPool,
+    query: u32,
+    index: u32,
+) {
+    (instance.fp().cmd_end_query_indexed_ext)(command_buffer, query_pool, query, index);
+}
+
+/// <https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdEndTransformFeedbackEXT.html>
+#[inline]
+pub unsafe fn end_transform_feedback(
+    instance: &TransformFeedback,
+    command_buffer: vk::CommandBuffer,
+    first_counter_buffer: u32,
+    counter_buffers: &[vk::Buffer],
+    counter_buffer_offsets: &[vk::DeviceSize],
+) {
+    assert_eq!(counter_buffers.len(), counter_buffer_offsets.len());
+
+    (instance.fp().cmd_end_transform_feedback_ext)(
+        command_buffer,
+        first_counter_buffer,
+        counter_buffers.len() as u32,
+        counter_buffers.as_ptr(),
+        counter_buffer_offsets.as_ptr(),
+    );
 }

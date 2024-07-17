@@ -1,5 +1,5 @@
 use ash::{
-    extensions::khr::CooperativeMatrix,
+    khr::cooperative_matrix::Instance as CooperativeMatrix,
     prelude::VkResult,
     vk::{self},
 };
@@ -17,7 +17,9 @@ fn main() -> VkResult<()> {
     )?;
     let device = UsamiDevice::new_by_filter(
         instance,
-        &[CooperativeMatrix::NAME.to_string_lossy().to_string()],
+        &[ash::khr::cooperative_matrix::NAME
+            .to_string_lossy()
+            .to_string()],
         Box::new(|physical_device| {
             physical_device
                 .queue_familiy_properties

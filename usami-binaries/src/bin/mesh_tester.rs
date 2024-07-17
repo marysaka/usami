@@ -1,7 +1,7 @@
 use std::ffi::CString;
 
 use ash::{
-    extensions::ext::MeshShader,
+    ext::mesh_shader::Device as MeshShader,
     prelude::VkResult,
     vk::{
         self, AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference,

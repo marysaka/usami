@@ -4,7 +4,7 @@ use std::{
 };
 
 use ash::{
-    extensions::ext::DebugUtils,
+    ext::debug_utils::Instance as DebugUtilsInstance,
     prelude::*,
     vk::{
         self, Bool32, DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT,
@@ -16,7 +16,7 @@ use ash::{
 pub struct UsamiInstance {
     pub vk_entry: Entry,
     pub vk_instance: ash::Instance,
-    pub vk_debug_utils_loader: DebugUtils,
+    pub vk_debug_utils_instance: DebugUtilsInstance,
     pub vk_messenger: DebugUtilsMessengerEXT,
     pub vk_version: u32,
 }
@@ -102,14 +102,14 @@ impl UsamiInstance {
             )
             .pfn_user_callback(Some(vulkan_debug_callback));
 
-        let vk_debug_utils_loader = DebugUtils::new(&vk_entry, &vk_instance);
+        let vk_debug_utils_instance = DebugUtilsInstance::new(&vk_entry, &vk_instance);
         let vk_messenger =
-            unsafe { vk_debug_utils_loader.create_debug_utils_messenger(&vk_debug_info, None)? };
+            unsafe { vk_debug_utils_instance.create_debug_utils_messenger(&vk_debug_info, None)? };
 
         Ok(Self {
             vk_entry,
             vk_instance,
-            vk_debug_utils_loader,
+            vk_debug_utils_instance,
             vk_messenger,
             vk_version: api_version,
         })
@@ -119,7 +119,7 @@ impl UsamiInstance {
 impl Drop for UsamiInstance {
     fn drop(&mut self) {
         unsafe {
-            self.vk_debug_utils_loader
+            self.vk_debug_utils_instance
                 .destroy_debug_utils_messenger(self.vk_messenger, None);
             self.vk_instance.destroy_instance(None)
         }

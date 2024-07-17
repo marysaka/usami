@@ -4,18 +4,15 @@ use std::{
 };
 
 use ash::{
-    extensions::{
-        ext::{MeshShader, ShaderObject},
-        khr::CooperativeMatrix,
-    },
+    ext::debug_utils::Device as DebugUtilsDevice,
     prelude::*,
     vk::{
         self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
         DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-        ExtConditionalRenderingFn, ExtTransformFeedbackFn, Extent2D, Extent3D, Format,
+        Extent2D, Extent3D, Format,
         FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
         ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, NvCooperativeMatrixFn, PhysicalDevice,
+        MemoryPropertyFlags, PhysicalDevice,
         PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR,
         PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
         PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
@@ -43,6 +40,7 @@ pub struct UsamiDevice {
     pub instance: UsamiInstance,
     pub physical_device: UsamiPhysicalDevice,
     pub handle: ash::Device,
+    pub vk_debug_utils_device: DebugUtilsDevice,
     pub vk_queue_index: u32,
 }
 
@@ -92,27 +90,27 @@ impl UsamiDevice {
         let mut has_cooperative_matrix_nv = false;
 
         for extension in &extensions_cstring {
-            if ShaderObject::NAME == extension.as_c_str() {
+            if ash::ext::shader_object::NAME == extension.as_c_str() {
                 has_shader_object_extension = true;
             }
 
-            if MeshShader::NAME == extension.as_c_str() {
+            if ash::ext::mesh_shader::NAME == extension.as_c_str() {
                 has_mesh_shader_extension = true;
             }
 
-            if ExtConditionalRenderingFn::NAME == extension.as_c_str() {
+            if ash::ext::conditional_rendering::NAME == extension.as_c_str() {
                 has_conditional_rendering_extension = true;
             }
 
-            if ExtTransformFeedbackFn::NAME == extension.as_c_str() {
+            if ash::ext::transform_feedback::NAME == extension.as_c_str() {
                 has_xfb_extension = true;
             }
 
-            if CooperativeMatrix::NAME == extension.as_c_str() {
+            if ash::khr::cooperative_matrix::NAME == extension.as_c_str() {
                 has_cooperative_matrix = true;
             }
 
-            if NvCooperativeMatrixFn::NAME == extension.as_c_str() {
+            if ash::nv::cooperative_matrix::NAME == extension.as_c_str() {
                 has_cooperative_matrix_nv = true;
             }
         }
@@ -217,10 +215,13 @@ impl UsamiDevice {
                 .create_device(physical_device.handle, &create_info, None)?
         };
 
+        let vk_debug_utils_device = DebugUtilsDevice::new(&instance.vk_instance, &handle);
+
         Ok(Arc::new(Self {
             instance,
             physical_device,
             handle,
+            vk_debug_utils_device,
             vk_queue_index,
         }))
     }
@@ -229,14 +230,11 @@ impl UsamiDevice {
         unsafe {
             let name = CString::new(name).unwrap();
 
-            self.instance
-                .vk_debug_utils_loader
-                .set_debug_utils_object_name(
-                    self.handle.handle(),
-                    &DebugUtilsObjectNameInfoEXT::default()
-                        .object_handle(object_handle)
-                        .object_name(name.as_c_str()),
-                )
+            self.vk_debug_utils_device.set_debug_utils_object_name(
+                &DebugUtilsObjectNameInfoEXT::default()
+                    .object_handle(object_handle)
+                    .object_name(name.as_c_str()),
+            )
         }
     }
 }

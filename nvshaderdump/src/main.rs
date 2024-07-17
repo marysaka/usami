@@ -90,6 +90,7 @@ async fn get_shader_binary(args: &RemoteSubCommand) -> Vec<u8> {
         )
         .text("vendor_id", args.vendor_id.to_string())
         .text("device_id", args.device_id.to_string())
+        .text("has_task_shader", true.to_string())
         .part("file", Part::bytes(spirv_data));
 
     let response = reqwest::Client::new()

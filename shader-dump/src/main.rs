@@ -1,10 +1,7 @@
 use ash::{
-    extensions::{
-        ext::{MeshShader, ShaderObject},
-        khr::CooperativeMatrix,
-    },
+    ext::shader_object::Device as ShaderObject,
     prelude::VkResult,
-    vk::{self, DescriptorSetLayout, NvCooperativeMatrixFn, ShaderCodeTypeEXT, ShaderStageFlags},
+    vk::{self, DescriptorSetLayout, ShaderCodeTypeEXT, ShaderCreateFlagsEXT, ShaderStageFlags},
 };
 use axum_typed_multipart::{FieldData, TryFromMultipart, TypedMultipart};
 use hyper::{body::Bytes, header};
@@ -37,9 +34,9 @@ fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult
     UsamiDevice::new_by_filter(
         create_instance()?,
         &[
-            ShaderObject::NAME.to_string_lossy().into(),
-            MeshShader::NAME.to_string_lossy().into(),
-            NvCooperativeMatrixFn::NAME.to_string_lossy().into(),
+            ash::ext::shader_object::NAME.to_string_lossy().into(),
+            ash::ext::mesh_shader::NAME.to_string_lossy().into(),
+            ash::nv::cooperative_matrix::NAME.to_string_lossy().into(),
         ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
@@ -199,6 +196,7 @@ fn compile_shaders(
     device: &Arc<UsamiDevice>,
     spirv: &[u8],
     entry_point: &str,
+    has_task_shader: bool,
 ) -> Result<Vec<Shader>, String> {
     let reflection_module = ShaderModule::load_u8_data(spirv)?;
     let entrypoints = reflection_module.enumerate_entry_points()?;
@@ -224,18 +222,25 @@ fn compile_shaders(
                 .map(|x| x.handle)
                 .collect::<Vec<DescriptorSetLayout>>();
 
+            let mut flags = ShaderCreateFlagsEXT::default();
+
+            if !has_task_shader {
+                flags |= ShaderCreateFlagsEXT::NO_TASK_SHADER;
+            }
+
             let shader_info = vk::ShaderCreateInfoEXT::default()
                 .stage(stage)
                 .next_stage(next_stages(stage))
                 .code_type(ShaderCodeTypeEXT::SPIRV)
                 .code(spirv)
                 .name(c_name.as_c_str())
+                .flags(flags)
                 .set_layouts(&set_layouts_handle);
 
             let bin = unsafe {
                 let shader_object = eso
                     .create_shaders(&[shader_info], None)
-                    .map_err(|x| format!("Vulkan error: {x}"))?[0];
+                    .map_err(|(_, x)| format!("Vulkan error: {x}"))?[0];
 
                 let bin: Vec<u8> = eso
                     .get_shader_binary_data(shader_object)
@@ -403,6 +408,7 @@ struct ShaderBinaryRequestData {
     pub vendor_id: usize,
     pub device_id: usize,
     pub entry_point: String,
+    pub has_task_shader: bool,
     pub file: FieldData<Bytes>,
 }
 
@@ -430,6 +436,11 @@ async fn show_get_shader_binary_form() -> Html<&'static str> {
                     </label>
 
                     <label>
+                        Has Task Shader:
+                        <input type="text" name="has_task_shader" value="true" required />
+                    </label>
+
+                    <label>
                         Upload SPIR-V file:
                         <input type="file" name="file" required />
                     </label>
@@ -447,6 +458,7 @@ async fn get_shader_binary_form(
         vendor_id,
         device_id,
         entry_point,
+        has_task_shader,
         file,
     }): TypedMultipart<ShaderBinaryRequestData>,
 ) -> Result<Response, Response> {
@@ -457,7 +469,7 @@ async fn get_shader_binary_form(
         ServerError::ErrorMessage(format!("create_device failed: {error}")).into_response()
     })?;
     let mut shaders =
-        compile_shaders(&device, &file_data, entry_point.as_str()).map_err(|error| {
+        compile_shaders(&device, &file_data, entry_point.as_str(), has_task_shader).map_err(|error| {
             ServerError::ErrorMessage(format!("compile_shaders failed: {error}")).into_response()
         })?;
     assert!(shaders.len() == 1);
