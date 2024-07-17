@@ -34,9 +34,9 @@ fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult
     UsamiDevice::new_by_filter(
         create_instance()?,
         &[
-            ash::ext::shader_object::NAME.to_string_lossy().into(),
-            ash::ext::mesh_shader::NAME.to_string_lossy().into(),
-            ash::nv::cooperative_matrix::NAME.to_string_lossy().into(),
+            "VK_EXT_shader_object".to_string(),
+            "VK_EXT_mesh_shader".to_string(),
+            "VK_NV_cooperative_matrix".to_string(),
         ],
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {

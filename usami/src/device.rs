@@ -201,6 +201,11 @@ impl UsamiDevice {
                     .get_physical_device_features2(physical_device.handle, &mut tmp_feat)
             };
 
+            // Ensure the next pointer is NULL as get_physical_device_features2 could create garbage...
+            vk11_features.p_next = core::ptr::null_mut();
+            vk12_features.p_next = core::ptr::null_mut();
+            vk13_features.p_next = core::ptr::null_mut();
+
             create_info = create_info.push_next(&mut vk11_features);
             create_info = create_info.push_next(&mut vk12_features);
 
