@@ -1,3 +1,5 @@
+// compiler_extensions: VK_EXT_mesh_shader,VK_NV_cooperative_matrix
+// compiler_shader_flags: no_task_shader
 #version 450
 #extension GL_EXT_mesh_shader : require
 

@@ -30,14 +30,14 @@ fn create_instance() -> VkResult<UsamiInstance> {
     )
 }
 
-fn create_device(vendor_id: Option<usize>, device_id: Option<usize>) -> VkResult<Arc<UsamiDevice>> {
+fn create_device(
+    vendor_id: Option<usize>,
+    device_id: Option<usize>,
+    extensions: &[String],
+) -> VkResult<Arc<UsamiDevice>> {
     UsamiDevice::new_by_filter(
         create_instance()?,
-        &[
-            "VK_EXT_shader_object".to_string(),
-            "VK_EXT_mesh_shader".to_string(),
-            "VK_NV_cooperative_matrix".to_string(),
-        ],
+        extensions,
         Box::new(move |physical_device| {
             if let Some(vendor_id) = vendor_id {
                 if physical_device.properties.vendor_id != vendor_id as u32 {
@@ -192,15 +192,50 @@ pub struct Shader {
     pub data: Vec<u8>,
 }
 
+const SHADER_FLAGS_MAPPING: [(&'static str, ShaderCreateFlagsEXT); 7] = [
+    ("link_stage", ShaderCreateFlagsEXT::LINK_STAGE),
+    (
+        "allow_varying_subgroup_size",
+        ShaderCreateFlagsEXT::ALLOW_VARYING_SUBGROUP_SIZE,
+    ),
+    (
+        "require_full_subgroups",
+        ShaderCreateFlagsEXT::REQUIRE_FULL_SUBGROUPS,
+    ),
+    ("no_task_shader", ShaderCreateFlagsEXT::NO_TASK_SHADER),
+    ("dispatch_base", ShaderCreateFlagsEXT::DISPATCH_BASE),
+    (
+        "fragment_shading_rate_attachment",
+        ShaderCreateFlagsEXT::FRAGMENT_SHADING_RATE_ATTACHMENT,
+    ),
+    (
+        "fragment_density_map_attachment",
+        ShaderCreateFlagsEXT::FRAGMENT_DENSITY_MAP_ATTACHMENT,
+    ),
+];
+
+fn human_flags_to_shader_flags(raw_flags: Vec<String>) -> ShaderCreateFlagsEXT {
+    let mut result = ShaderCreateFlagsEXT::empty();
+
+    for (name, val) in SHADER_FLAGS_MAPPING {
+        if raw_flags.contains(&name.into()) {
+            result |= val;
+        }
+    }
+
+    result
+}
+
 fn compile_shaders(
     device: &Arc<UsamiDevice>,
     spirv: &[u8],
     entry_point: &str,
-    has_task_shader: bool,
+    shader_flags: Vec<String>,
 ) -> Result<Vec<Shader>, String> {
     let reflection_module = ShaderModule::load_u8_data(spirv)?;
     let entrypoints = reflection_module.enumerate_entry_points()?;
     let eso = ShaderObject::new(&device.instance.vk_instance, &device.handle);
+    let flags = human_flags_to_shader_flags(shader_flags);
 
     let mut shaders = Vec::new();
     for e in entrypoints {
@@ -221,12 +256,6 @@ fn compile_shaders(
                 .iter()
                 .map(|x| x.handle)
                 .collect::<Vec<DescriptorSetLayout>>();
-
-            let mut flags = ShaderCreateFlagsEXT::default();
-
-            if !has_task_shader {
-                flags |= ShaderCreateFlagsEXT::NO_TASK_SHADER;
-            }
 
             let shader_info = vk::ShaderCreateInfoEXT::default()
                 .stage(stage)
@@ -408,7 +437,8 @@ struct ShaderBinaryRequestData {
     pub vendor_id: usize,
     pub device_id: usize,
     pub entry_point: String,
-    pub has_task_shader: bool,
+    pub extensions: String,
+    pub shader_flags: String,
     pub file: FieldData<Bytes>,
 }
 
@@ -458,18 +488,40 @@ async fn get_shader_binary_form(
         vendor_id,
         device_id,
         entry_point,
-        has_task_shader,
+        shader_flags,
+        mut extensions,
         file,
     }): TypedMultipart<ShaderBinaryRequestData>,
 ) -> Result<Response, Response> {
+    if !extensions.contains("VK_EXT_shader_object") {
+        let is_empty = extensions.is_empty();
+        if !is_empty {
+            extensions += ",";
+        }
+
+        extensions += "VK_EXT_shader_object".into();
+    }
+
+    let shader_flags = if !shader_flags.is_empty() {
+        shader_flags
+            .split(",")
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+    } else {
+        Vec::new()
+    };
+    let extensions = extensions
+        .split(",")
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>();
     let file_name = file.metadata.file_name.unwrap_or(String::from("data.spv"));
     let file_data = file.contents.to_vec();
     let output_file_name = file_name.replace(".spv", ".bin");
-    let device = create_device(Some(vendor_id), Some(device_id)).map_err(|error| {
+    let device = create_device(Some(vendor_id), Some(device_id), &extensions).map_err(|error| {
         ServerError::ErrorMessage(format!("create_device failed: {error}")).into_response()
     })?;
-    let mut shaders =
-        compile_shaders(&device, &file_data, entry_point.as_str(), has_task_shader).map_err(|error| {
+    let mut shaders = compile_shaders(&device, &file_data, entry_point.as_str(), shader_flags)
+        .map_err(|error| {
             ServerError::ErrorMessage(format!("compile_shaders failed: {error}")).into_response()
         })?;
     assert!(shaders.len() == 1);

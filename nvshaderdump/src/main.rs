@@ -48,6 +48,14 @@ struct RemoteSubCommand {
     #[argh(option)]
     entrypoint: Option<String>,
 
+    /// the Vulkan extensions to enable.
+    #[argh(option)]
+    extensions: Option<String>,
+
+    /// the shader flags to pass.
+    #[argh(option)]
+    shader_flags: Option<String>,
+
     /// the vendor id.
     #[argh(option)]
     vendor_id: usize,
@@ -90,6 +98,8 @@ async fn get_shader_binary(args: &RemoteSubCommand) -> Vec<u8> {
         )
         .text("vendor_id", args.vendor_id.to_string())
         .text("device_id", args.device_id.to_string())
+        .text("extensions", args.extensions.clone().unwrap_or_default())
+        .text("shader_flags", args.shader_flags.clone().unwrap())
         .text("has_task_shader", true.to_string())
         .part("file", Part::bytes(spirv_data));
 
