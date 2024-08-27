@@ -466,8 +466,13 @@ async fn show_get_shader_binary_form() -> Html<&'static str> {
                     </label>
 
                     <label>
-                        Has Task Shader:
-                        <input type="text" name="has_task_shader" value="true" required />
+                        Extensions:
+                        <input type="text" name="extensions" value="" />
+                    </label>
+
+                    <label>
+                        Shader flags:
+                        <input type="text" name="shader_flags" value="" />
                     </label>
 
                     <label>
