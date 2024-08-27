@@ -23,6 +23,11 @@ KIYAMA_VENDOR_ID=4318
 KIYAMA_DEVICE_ID=9634
 KIYAMA_SM_VERSION=SM86
 
+DOLLY_IP=dolly
+DOLLY_VENDOR_ID=4318
+DOLLY_DEVICE_ID=10370
+DOLLY_SM_VERSION=SM89
+
 
 IP=$SATEN_IP
 VENDOR_ID=$SATEN_VENDOR_ID
@@ -33,6 +38,11 @@ SM_VERSION=$SATEN_SM_VERSION
 #VENDOR_ID=$KIYAMA_VENDOR_ID
 #DEVICE_ID=$KIYAMA_DEVICE_ID
 #SM_VERSION=$KIYAMA_SM_VERSION
+
+#IP=$DOLLY_IP
+#VENDOR_ID=$DOLLY_VENDOR_ID
+#DEVICE_ID=$DOLLY_DEVICE_ID
+#SM_VERSION=$DOLLY_SM_VERSION
 
 glslangValidator -g0 --target-env vulkan1.3 $glsl_path -o $shader_output_dir/output.spv
 cargo run --bin nvshaderdump -- remote --hostname $IP \
@@ -47,3 +57,8 @@ nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_ou
 hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
 hexdump -C $shader_output_dir/mesh_shader_header_gs.bin > $shader_output_dir/mesh_shader_header_gs.hex
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex
+
+if [ "$TERM_PROGRAM" = "vscode" ]; then
+  code $shader_output_dir/shader_data.asm
+  true
+fi
