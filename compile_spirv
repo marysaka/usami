@@ -10,25 +10,38 @@ shader_output_dir=$output_dir/$spv_filename
 
 mkdir -p $shader_output_dir
 
-SATEN_IP=192.168.1.24
-SATEN_VENDOR_ID=4318
+SATEN_IP=saten
 SATEN_DEVICE_ID=7956
 SATEN_SM_VERSION=SM75
 
-KIYAMA_IP=192.168.1.45
-KIYAMA_VENDOR_ID=4318
+KIYAMA_IP=kiyama
 KIYAMA_DEVICE_ID=9634
 KIYAMA_SM_VERSION=SM86
 
+DOLLY_IP=dolly
+DOLLY_DEVICE_ID=10370
+DOLLY_SM_VERSION=SM89
+
 
 IP=$SATEN_IP
-VENDOR_ID=$SATEN_VENDOR_ID
 DEVICE_ID=$SATEN_DEVICE_ID
 SM_VERSION=$SATEN_SM_VERSION
 
-spirv-as --target-env vulkan1.3 $spv_path -o $shader_output_dir/output.spv
-cargo run --bin nvshaderdump -- remote --hostname $IP --port 9999 --vendor-id $VENDOR_ID --device-id $DEVICE_ID "$shader_output_dir/output.spv" --output-directory "$shader_output_dir"
+#IP=$KIYAMA_IP
+#DEVICE_ID=$KIYAMA_DEVICE_ID
+#SM_VERSION=$KIYAMA_SM_VERSION
+
+#IP=$DOLLY_IP
+#DEVICE_ID=$DOLLY_DEVICE_ID
+#SM_VERSION=$DOLLY_SM_VERSION
+
+python3 scripts/compile_shader.py --debug --host $IP --device-id $DEVICE_ID $shader_output_dir $spv_path
 nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
 hexdump -C $shader_output_dir/shader_header.bin > $shader_output_dir/shader_header.hex
 hexdump -C $shader_output_dir/mesh_shader_header_gs.bin > $shader_output_dir/mesh_shader_header_gs.hex
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex
+
+if [ "$TERM_PROGRAM" = "vscode" ]; then
+  code $shader_output_dir/shader_data.asm
+  true
+fi
