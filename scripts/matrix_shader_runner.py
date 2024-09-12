@@ -3,6 +3,12 @@ from pathlib import Path
 import sys
 import os
 from typing import Any, Dict, List, Optional, Tuple
+import struct
+import math
+
+
+def select_byte(value: int, byte_index: int) -> int:
+    return value >> (byte_index * 8) & 0xFF
 
 
 def parse_pred(pred: str) -> Tuple[int, bool, str]:
@@ -238,6 +244,71 @@ def do_stg(ctx: "EmulatorContext", info: InstrInfo):
         ctx.global_write_callback(src0 + element_idx * 4, src1, element_size)
 
 
+def lop3_lut(x: int, y: int, z: int, lut: int) -> int:
+    res = x & ~x
+
+    if (lut & (1 << 0)) != 0:
+        res = res | (~x & ~y & ~z)
+
+    if (lut & (1 << 1)) != 0:
+        res = res | (~x & ~y & z)
+
+    if (lut & (1 << 2)) != 0:
+        res = res | (~x & y & ~z)
+
+    if (lut & (1 << 3)) != 0:
+        res = res | (~x & y & z)
+
+    if (lut & (1 << 4)) != 0:
+        res = res | (x & ~y & ~z)
+
+    if (lut & (1 << 5)) != 0:
+        res = res | (x & ~y & z)
+
+    if (lut & (1 << 6)) != 0:
+        res = res | (x & y & ~z)
+
+    if (lut & (1 << 7)) != 0:
+        res = res | (x & y & z)
+
+    return res
+
+
+def do_lop3(ctx: "EmulatorContext", info: InstrInfo):
+    assert info.flags[0] == "LUT" and info.args[-1] == "!PT"
+
+    # LOP3.LUT R2, R6, 0x3, RZ, 0xc0, !PT ;
+    print(info.args)
+
+    src0 = ctx.read_from_src(info.args[1])
+    src1 = ctx.read_from_src(info.args[2])
+    src2 = ctx.read_from_src(info.args[3])
+    lut = ctx.read_from_src(info.args[4])
+
+    res = lop3_lut(src0, src1, src2, lut)
+    ctx.set_dst(info.args[0], res)
+
+
+def do_prmt(ctx: "EmulatorContext", info: InstrInfo):
+    src0 = ctx.read_from_src(info.args[1])
+    src1 = ctx.read_from_src(info.args[2])
+    src2 = ctx.read_from_src(info.args[3])
+
+    select0 = (src1 >> 0) & 0xF
+    select1 = (src1 >> 4) & 0xF
+    select2 = (src1 >> 8) & 0xF
+    select3 = (src1 >> 12) & 0xF
+
+    tmp = src0 | src2 << 32
+    res = (
+        select_byte(tmp, select0)
+        | select_byte(tmp, select1) << 8
+        | select_byte(tmp, select2) << 16
+        | select_byte(tmp, select3) << 24
+    )
+    ctx.set_dst(info.args[0], res)
+
+
 INSTRS_LUT = {
     "IMAD": do_imad,
     "IADD3": do_iadd3,
@@ -250,6 +321,8 @@ INSTRS_LUT = {
     "EXIT": do_exit,
     "LDG": do_ldg,
     "STG": do_stg,
+    "LOP3": do_lop3,
+    "PRMT": do_prmt,
 }
 
 
