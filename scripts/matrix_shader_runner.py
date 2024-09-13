@@ -117,6 +117,11 @@ def do_iadd3(ctx: "EmulatorContext", info: InstrInfo):
     src_idx = 1
 
     # TODO: Overflow support
+    # Skip overflow low predicate if present
+    if parse_src_text(info.args[src_idx])["type"] == "pred":
+        src_idx += 1
+
+    # Skip overflow high predicate if present
     if parse_src_text(info.args[src_idx])["type"] == "pred":
         src_idx += 1
 
