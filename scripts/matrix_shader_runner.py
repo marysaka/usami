@@ -7,6 +7,9 @@ import struct
 import math
 
 
+U32_MAX_VALUE = 0xFFFFFFFF
+
+
 def select_byte(value: int, byte_index: int) -> int:
     return value >> (byte_index * 8) & 0xFF
 
@@ -279,11 +282,44 @@ def lop3_lut(x: int, y: int, z: int, lut: int) -> int:
     return res
 
 
+def shf(
+    low_val: int,
+    shift: int,
+    high_val: int,
+    high: bool = False,
+    wrap: bool = False,
+    is_right: bool = False,
+) -> int:
+    limit = 32
+
+    n = shift & (limit - 1) if wrap else min(shift, limit)
+
+    if is_right:
+        d = (high_val << (limit - n)) | (low_val >> n)
+    else:
+        d = (high_val << n) | (low_val >> (limit - n))
+    if high:
+        return d >> 32
+
+    return d & U32_MAX_VALUE
+
+
+def lea(x: int, y: int, z: int, shift: int, is_high: bool) -> int:
+    if is_high:
+        if shift == 0:
+            high = 0
+        else:
+            high = x >> (32 - shift)
+
+        high = high | z << shift
+
+        return high + y
+
+    return (x << z) + y
+
+
 def do_lop3(ctx: "EmulatorContext", info: InstrInfo):
     assert info.flags[0] == "LUT" and info.args[-1] == "!PT"
-
-    # LOP3.LUT R2, R6, 0x3, RZ, 0xc0, !PT ;
-    print(info.args)
 
     src0 = ctx.read_from_src(info.args[1])
     src1 = ctx.read_from_src(info.args[2])
@@ -314,6 +350,32 @@ def do_prmt(ctx: "EmulatorContext", info: InstrInfo):
     ctx.set_dst(info.args[0], res)
 
 
+def do_shf(ctx: "EmulatorContext", info: InstrInfo):
+    src0 = ctx.read_from_src(info.args[1])
+    src1 = ctx.read_from_src(info.args[2])
+    src2 = ctx.read_from_src(info.args[3])
+
+    is_right = "R" in info.flags
+    is_high = "HI" in info.flags
+    is_wrap = "W" in info.flags
+    res = shf(src0, src1, src2, is_high, is_wrap, is_right)
+    ctx.set_dst(info.args[0], res)
+
+
+def do_lea(ctx: "EmulatorContext", info: InstrInfo):
+    src0 = ctx.read_from_src(info.args[1])
+    src1 = ctx.read_from_src(info.args[2])
+    src2 = ctx.read_from_src(info.args[3])
+    src3 = None
+
+    if len(info.args) >= 5:
+        src3 = ctx.read_from_src(info.args[4])
+
+    is_high = "HI" in info.flags
+    res = lea(src0, src1, src2, src3, is_high)
+    ctx.set_dst(info.args[0], res)
+
+
 INSTRS_LUT = {
     "IMAD": do_imad,
     "IADD3": do_iadd3,
@@ -328,6 +390,8 @@ INSTRS_LUT = {
     "STG": do_stg,
     "LOP3": do_lop3,
     "PRMT": do_prmt,
+    "SHF": do_shf,
+    "LEA": do_lea,
 }
 
 
@@ -389,6 +453,7 @@ class EmulatorContext(object):
     ip: int
     shader_code: Dict[int, str]
     running: bool
+    debug: bool
     cbuf_read_callback: Optional[Any]
     spr_read_callback: Optional[Any]
     global_read_callback: Optional[Any]
@@ -412,6 +477,8 @@ class EmulatorContext(object):
         self.gprs = [0] * 255
         self.preds = [0] * 7
         self.ip = 0
+        self.running = False
+        self.debug = False
 
     def read_gpr(self, idx: int) -> int:
         if idx == 255:
@@ -480,6 +547,9 @@ class EmulatorContext(object):
             raise Exception(dst_type)
 
     def set_dst(self, dst_text, value: int, offset: int = 0, element_size: int = 32):
+        if self.debug:
+            print(f"{dst_text} = 0x{value:x}")
+
         return self.set_dst_from_info(
             parse_dst_text(dst_text), value, offset, element_size
         )
@@ -491,6 +561,8 @@ class EmulatorContext(object):
 
     def exec_instr(self, instr: str):
         instr_info = InstrInfo.parse_instr(instr)
+        if self.debug:
+            print(f'Executing "{instr_info.raw}"')
 
         pred_sel = self.read_pred(instr_info.pred_idx)
 
@@ -506,9 +578,12 @@ class EmulatorContext(object):
             INSTRS_LUT[instr_info.name](self, instr_info)
         else:
             sys.stderr.write(f"WARN: Unknown instruction {instr_info.name}, skipping\n")
+            assert not self.debug
 
-    def run(self, start_ip: int):
+    def run(self, start_ip: int, debug: bool = False):
+        self.ip = start_ip
         self.running = True
+        self.debug = debug
 
         while self.running:
             instr = self.shader_code[self.ip]
@@ -542,7 +617,7 @@ def main() -> int:
 
     info = parse_assembly_from_file(Path(args.input_assembly_path))
 
-    lane_id = 2
+    lane_id = 0
     stride = 0x10
     element = 0x20
     bindings = list()
@@ -614,11 +689,11 @@ def main() -> int:
         else:
             print(f"Unknown global read at address 0x{address:x}")
 
-        print((hex(address), hex(value)))
         return value & element_mask
 
     def write_global_value(address: int, value: int, element_size: int):
         print((hex(address), hex(value)))
+        pass
 
     ctx = EmulatorContext(
         info,
@@ -627,7 +702,7 @@ def main() -> int:
         read_global_value,
         write_global_value,
     )
-    ctx.run(0)
+    ctx.run(0, True)
 
     return 0
 
