@@ -294,10 +294,11 @@ def shf(
 
     n = shift & (limit - 1) if wrap else min(shift, limit)
 
-    if is_right:
-        d = (high_val << (limit - n)) | (low_val >> n)
+    if not is_right:
+        d = (high_val >> (limit - n)) | (low_val << n)
     else:
-        d = (high_val << n) | (low_val >> (limit - n))
+        d = (high_val << (limit - n)) | (low_val >> n)
+
     if high:
         return d >> 32
 
