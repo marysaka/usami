@@ -1,6 +1,8 @@
 import sys
 from typing import List
 
+from matrix_shader_runner import *
+
 
 def lea_hi(a, b, c, shift):
     if shift == 0:
@@ -1462,6 +1464,125 @@ def compute_row_major_mat8x8_offset_f16(
     res.append(R0 + 2)
 
     return res
+
+
+def exec_shader(
+    shader_path: Path,
+    stride: int,
+    element: int,
+    lane_id: int,
+    expected_element_size: int,
+) -> List[int]:
+    res = list()
+
+    info = parse_assembly_from_file(shader_path)
+
+    bindings = list()
+
+    # Output buffer (set=0, binding=0)
+    bindings.append([0] * 0x8000)
+
+    # Stride buffer (set=0, binding=1)
+    bindings.append([stride])
+
+    # Unused buffer (set=0, binding=2)
+    # bindings.append([])
+
+    # Element buffer (set=0, binding=3)
+    bindings.append([element])
+
+    def read_cbuf_value(
+        cbuf_idx: int, cbuf_offset: int, extra_offset: int, element_size: int
+    ) -> int:
+        assert cbuf_idx == 0
+        assert element_size == 32
+
+        cbuf_offset += extra_offset
+
+        # set/binding mappings (XXX: max offset is unk, we assume 8 max for now)
+        if cbuf_offset >= 0x30 and cbuf_offset <= 0xB0:
+            binding_idx = (cbuf_offset - 0x30) // 0x10
+            is_size = ((cbuf_offset - 0x30) % 0x10) == 0x8
+
+            # We are assuming 1MiB max of data per bindings
+            # And process fake address accordingly.
+            max_buffer_size = 0x100000
+
+            if not is_size:
+                return max_buffer_size * (binding_idx + 1)
+
+            if len(bindings) <= binding_idx:
+                print(f"out of bound {binding_idx}")
+                return 0
+
+            return len(bindings[binding_idx]) * 0x4
+
+        print(f"Unknown cbuf offset 0x{cbuf_offset:x}")
+
+        return 0
+
+    def read_special_reg_value(special_reg_name: str) -> int:
+        if special_reg_name == "SR_LANEID":
+            return lane_id
+
+        print(special_reg_name)
+        assert special_reg_name == "SR_LANEID"
+
+        return 0
+
+    def read_global_value(address: int, element_size: int) -> int:
+        assert element_size <= 32
+
+        element_mask = (1 << element_size) - 1
+
+        value = 0
+
+        if address >= 0x100000 and address < 0x800000:
+            binding_idx = (address // 0x100000) - 1
+            offset = address % 0x100000
+
+            aligned_offset = offset // 4
+            value_shift = (offset % 4) * 8
+
+            value = bindings[binding_idx][aligned_offset]
+            value = value >> value_shift
+        else:
+            print(f"Unknown global read at address 0x{address:x}")
+
+        return value & element_mask
+
+    def write_global_value(address: int, value: int, element_size: int):
+        byte_element_size = element_size // 8
+        base_offset = address % 0x100000
+
+        for i in range(byte_element_size // expected_element_size):
+            offset = base_offset + i * expected_element_size
+            res.append(offset)
+
+        # print(f"write_global_value: 0x{address:x} = 0x{value:x} (size: {element_size})")
+        pass
+
+    ctx = EmulatorContext(
+        info,
+        read_cbuf_value,
+        read_special_reg_value,
+        read_global_value,
+        write_global_value,
+    )
+    ctx.run(0, False)
+
+    return res
+
+
+def compute_row_major_mat8x8_offset_f16_emulated(
+    stride: int, element: int, lane_id: int
+) -> List[int]:
+    shader_path = Path(
+        "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
+    )
+    element_size = 2
+
+    return exec_shader(shader_path, stride, element, lane_id, element_size)
 
 
 def compute_row_major_mat8x8_offset_u32(
