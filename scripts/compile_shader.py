@@ -5,6 +5,7 @@ import os
 import subprocess
 import argparse
 import tempfile
+import time
 import requests
 from typing import Optional, Tuple
 
@@ -149,7 +150,12 @@ def main() -> int:
         "--shader-flags",
         compiler_shader_flags,
     ]
-    subprocess.check_call(args)
+    res = subprocess.call(args)
+
+    while res != 0:
+        print("nvshaderdump failed retrying in 5s")
+        time.sleep(5)
+        res = subprocess.call(args)
 
     source_file_name = shader_source_path.stem
 
