@@ -1661,10 +1661,12 @@ TEST_CASES = (
 )
 
 
-# TEST_CASES = [
-#    (32, 8, 1, False, compute_row_major_mat32x8_offset_u8),
-#    (8, 32, 1, True, compute_column_major_mat32x8_offset_u8),
-# ]
+TEST_CASES = [
+    # 8x8 F16 (Row Major)
+    (8, 8, 2, False, compute_row_major_mat8x8_offset_f16),
+    # 8x8 F16 (Row Major)
+    (8, 8, 2, False, compute_row_major_mat8x8_offset_f16_emulated),
+]
 
 print(f"selected_element = {selected_element}")
 print(f"selected_stride = {selected_stride}")

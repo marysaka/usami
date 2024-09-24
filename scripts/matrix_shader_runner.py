@@ -100,7 +100,7 @@ class InstrInfo(object):
 
 
 def do_imad(ctx: "EmulatorContext", info: InstrInfo):
-    if "X" in info.flags:
+    if "X" in info.flags and ctx.debug:
         sys.stderr.write(f"WARN: Skipping unsupported IMAD.X\n")
         return
 
@@ -113,7 +113,7 @@ def do_imad(ctx: "EmulatorContext", info: InstrInfo):
 
 
 def do_iadd3(ctx: "EmulatorContext", info: InstrInfo):
-    if "X" in info.flags:
+    if "X" in info.flags and ctx.debug:
         sys.stderr.write(f"WARN: Skipping unsupported IADD3.X\n")
         return
 
@@ -192,7 +192,7 @@ def do_s2r(ctx: "EmulatorContext", info: InstrInfo):
 
 
 def do_cs2r(ctx: "EmulatorContext", info: InstrInfo):
-    if info.args[1] != "SRZ":
+    if info.args[1] != "SRZ" and ctx.debug:
         sys.stderr.write(f"WARN: Skipping unsupported CS2R on non SRZ register\n")
         return
 
