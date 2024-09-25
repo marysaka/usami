@@ -4,6 +4,7 @@ import sys
 
 ALIGN = 256
 
+
 def create_matrix(row_size: int, colum_size: int):
     res = []
 
@@ -15,8 +16,10 @@ def create_matrix(row_size: int, colum_size: int):
 
     return res
 
+
 def write_matrix(f, matrix):
     f.write(matrix.tobytes())
+
 
 output_file = sys.argv[1]
 m = int(sys.argv[2])

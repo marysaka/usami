@@ -1,10 +1,7 @@
 import argparse
 from pathlib import Path
 import sys
-import os
 from typing import Any, Dict, List, Optional, Tuple
-import struct
-import math
 
 
 U32_MAX_VALUE = 0xFFFFFFFF
@@ -693,7 +690,7 @@ def main() -> int:
         return value & element_mask
 
     def write_global_value(address: int, value: int, element_size: int):
-        print((hex(address), hex(value)))
+        print(f"write_global_value: 0x{address:x} = 0x{value:x} (size: {element_size})")
         pass
 
     ctx = EmulatorContext(

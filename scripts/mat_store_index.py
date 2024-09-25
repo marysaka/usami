@@ -2,6 +2,11 @@ import sys
 from typing import List
 
 from matrix_shader_runner import *
+from coop_matrix_defs import (
+    MATRIX_USAGE_SHORT_NAME,
+    SUPPORTED_CFGS_SM75,
+    VK_TYPE_TO_BYTE_SIZE,
+)
 
 
 def lea_hi(a, b, c, shift):
@@ -1467,12 +1472,12 @@ def compute_row_major_mat8x8_offset_f16(
 
 
 def exec_shader(
-    shader_path: Path,
     stride: int,
     element: int,
     lane_id: int,
-    expected_element_size: int,
+    user_data: Tuple[Path, int],
 ) -> List[int]:
+    (shader_path, expected_element_size) = user_data
     res = list()
 
     info = parse_assembly_from_file(shader_path)
@@ -1575,14 +1580,9 @@ def exec_shader(
 
 
 def compute_row_major_mat8x8_offset_f16_emulated(
-    stride: int, element: int, lane_id: int
+    stride: int, element: int, lane_id: int, user_data
 ) -> List[int]:
-    shader_path = Path(
-        "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
-    )
-    element_size = 2
-
-    return exec_shader(shader_path, stride, element, lane_id, element_size)
+    return exec_shader(stride, element, lane_id, user_data)
 
 
 def compute_row_major_mat8x8_offset_u32(
@@ -1668,6 +1668,7 @@ def test_variant(
     element: int,
     byte_size: int,
     is_col_major: bool,
+    user_data: object,
     orig_func,
 ) -> bool:
     success = True
@@ -1680,7 +1681,10 @@ def test_variant(
     expected_mat_val_count = (column * row) // 32
 
     for lane_id in range(32):
-        mat_orig_offsets = orig_func(stride, element, lane_id)
+        if not user_data:
+            mat_orig_offsets = orig_func(stride, element, lane_id)
+        else:
+            mat_orig_offsets = orig_func(stride, element, lane_id, user_data)
 
         assert expected_mat_val_count == len(mat_orig_offsets)
 
@@ -1708,7 +1712,7 @@ def test_variant(
                 print(f"    us   = {mat_computed_offsets}")
                 print("============\n")
             success = False
-            continue
+            break
 
     if success:
         print("Result = Success")
@@ -1726,75 +1730,200 @@ selected_stride = 123
 # 16x8
 TEST_CASES_16x8 = [
     # U8/S8 (Row Major) (FIXME: INVALID???)
-    # (16, 8, 1, False, compute_row_major_mat16x8_offset_u8),
+    # (16, 8, 1, False, None, compute_row_major_mat16x8_offset_u8),
     # F16 (Row Major)
-    (16, 8, 2, False, compute_row_major_mat16x8_offset_f16),
+    (16, 8, 2, False, None, compute_row_major_mat16x8_offset_f16),
     # F32 (Row Major)
-    (16, 8, 4, False, compute_row_major_mat16x8_offset_f32),
+    (16, 8, 4, False, None, compute_row_major_mat16x8_offset_f32),
     # U8/S8 (Column Major) (FIXME: INVALID???)
-    # (8, 16, 1, True, compute_column_major_mat16x8_offset_u8),
+    # (8, 16, 1, True, None, compute_column_major_mat16x8_offset_u8),
     # F16 (Column Major)
     # TODO: NVIDIA cheat and use MOVM here for F16, we can use F32 to get the layout.
     # F32 (Column Major)
-    (8, 16, 4, True, compute_column_major_mat16x8_offset_f32),
+    (8, 16, 4, True, None, compute_column_major_mat16x8_offset_f32),
 ]
 
 # 16x16
 TEST_CASES_16x16 = [
     # U8/S8 (Row Major) (FIXME: INVALID???)
-    # (16, 16, 1, False, compute_row_major_mat16x16_offset_u8),
+    # (16, 16, 1, False, None, compute_row_major_mat16x16_offset_u8),
     # F16 (Row Major)
-    (16, 16, 2, False, compute_row_major_mat16x16_offset_f16),
+    (16, 16, 2, False, None, compute_row_major_mat16x16_offset_f16),
     # F32/U32 (Row Major)
-    (16, 16, 4, False, compute_row_major_mat16x16_offset_u32),
+    (16, 16, 4, False, None, compute_row_major_mat16x16_offset_u32),
     # U8/S8 (Column Major) (FIXME: INVALID???)
-    # (16, 16, 1, True, compute_column_major_mat16x16_offset_u8),
+    # (16, 16, 1, True, None, compute_column_major_mat16x16_offset_u8),
     # F16 (Column Major)
     # TODO: NVIDIA cheat and use MOVM here for F16, we can use F32 to get the layout.
     # F32/U32/S32 (Column Major)
-    (16, 16, 4, True, compute_column_major_mat16x16_offset_f32),
+    (16, 16, 4, True, None, compute_column_major_mat16x16_offset_f32),
 ]
 
-# (row, col, byte_size, is_col_major, orig_func)
+# (row, col, byte_size, is_col_major, user_data, orig_func)
 TEST_CASES = (
     TEST_CASES_16x8
     + TEST_CASES_16x16
     + [
         # 32x16 U8/S8 (Row Major)
-        (32, 16, 1, False, compute_row_major_mat32x16_offset_u8),
+        (32, 16, 1, False, None, compute_row_major_mat32x16_offset_u8),
         # 16x32 U8/S8 (Row Major)
-        (16, 32, 1, False, compute_row_major_mat16x32_offset_u8),
+        (16, 32, 1, False, None, compute_row_major_mat16x32_offset_u8),
         # 32x8 U8/S8 (Row Major)
-        (32, 8, 1, False, compute_row_major_mat32x8_offset_u8),
+        (32, 8, 1, False, None, compute_row_major_mat32x8_offset_u8),
         # 32x16 U8/S8 (Column Major)
-        (16, 32, 1, True, compute_column_major_mat32x16_offset_u8),
+        (16, 32, 1, True, None, compute_column_major_mat32x16_offset_u8),
         # 16x32 U8/S8 (Column Major)
-        (32, 16, 1, True, compute_column_major_mat16x32_offset_u8),
+        (32, 16, 1, True, None, compute_column_major_mat16x32_offset_u8),
         # 32x8 U8/S8 (Column Major)
-        (8, 32, 1, True, compute_column_major_mat32x8_offset_u8),
+        (8, 32, 1, True, None, compute_column_major_mat32x8_offset_u8),
         # 8x8 F16 (Row Major)
-        (8, 8, 2, False, compute_row_major_mat8x8_offset_f16),
+        (8, 8, 2, False, None, compute_row_major_mat8x8_offset_f16),
         # 8x8 U32 (Row Major)
-        (8, 8, 4, False, compute_row_major_mat8x8_offset_u32),
+        (8, 8, 4, False, None, compute_row_major_mat8x8_offset_u32),
         # 8x8 U32 (Column Major)
-        (8, 8, 4, True, compute_column_major_mat8x8_offset_u32),
+        (8, 8, 4, True, None, compute_column_major_mat8x8_offset_u32),
     ]
 )
 
 
 TEST_CASES = [
     # 8x8 F16 (Row Major)
-    (8, 8, 2, False, compute_row_major_mat8x8_offset_f16),
+    (8, 8, 2, False, None, compute_row_major_mat8x8_offset_f16),
     # 8x8 F16 (Row Major)
-    (8, 8, 2, False, compute_row_major_mat8x8_offset_f16_emulated),
+    (
+        8,
+        8,
+        2,
+        False,
+        (
+            Path(
+                "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
+            ),
+            2,
+        ),
+        compute_row_major_mat8x8_offset_f16_emulated,
+    ),
+    (
+        8,
+        8,
+        2,
+        False,
+        (
+            Path(
+                "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
+            ),
+            2,
+        ),
+        lambda stride, element, lane_id, user_data: exec_shader(
+            stride,
+            element,
+            lane_id,
+            user_data,
+        ),
+    ),
 ]
+
+
+def add_shader_test(
+    output_directory: Path,
+    vk_type: str,
+    row: int,
+    col: int,
+    usage: str,
+    layout_name: str,
+):
+    byte_size = VK_TYPE_TO_BYTE_SIZE[vk_type]
+    short_usage = MATRIX_USAGE_SHORT_NAME[usage]
+    shader_name = f"matrix_{vk_type.lower()}_{short_usage}_{row}x{col}.asm"
+    full_path = output_directory.joinpath(shader_name)
+
+    is_col_major = layout_name == "column"
+
+    case_lambda = lambda stride, element, lane_id, user_data: exec_shader(
+        stride, element, lane_id, user_data
+    )
+
+    info = parse_assembly_from_file(full_path)
+
+    for instr in info.values():
+        if "MOVM" in instr:
+            print("MOVM in use, ignoring test case...")
+            return
+
+    # (row, col, byte_size, is_col_major, user_data, orig_func)
+    TEST_CASES.append(
+        (row, col, byte_size, is_col_major, (full_path, byte_size), case_lambda)
+    )
+
+
+def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
+    a_type = entry["a_type"]
+    b_type = entry["b_type"]
+    c_type = entry["c_type"]
+    result_type = entry["result_type"]
+    m_size = entry["m_size"]
+    n_size = entry["n_size"]
+    k_size = entry["k_size"]
+    matrix_name = f"{m_size}x{n_size}x{k_size}"
+
+    for layout_name, store_layout in [
+        ("row", "gl_CooperativeMatrixLayoutRowMajor"),
+        ("column", "gl_CooperativeMatrixLayoutColumnMajor"),
+    ]:
+        final_output_directory = output_directory.joinpath(matrix_name).joinpath(
+            layout_name
+        )
+
+        # MxNxK (A/B/C/D)
+        # MxK (A)
+        add_shader_test(
+            final_output_directory,
+            a_type,
+            m_size,
+            k_size,
+            "gl_MatrixUseA",
+            layout_name,
+        )
+        # KxN (B)
+        add_shader_test(
+            final_output_directory,
+            b_type,
+            k_size,
+            n_size,
+            "gl_MatrixUseB",
+            layout_name,
+        )
+        # MxN (C)
+        add_shader_test(
+            final_output_directory,
+            c_type,
+            m_size,
+            n_size,
+            "gl_MatrixUseAccumulator",
+            layout_name,
+        )
+
+        # MxN (D)
+        if c_type != result_type:
+            add_shader_test(
+                final_output_directory,
+                result_type,
+                m_size,
+                n_size,
+                "gl_MatrixUseAccumulator",
+                layout_name,
+            )
+
+
+for entry in SUPPORTED_CFGS_SM75:
+    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
 
 print(f"selected_element = {selected_element}")
 print(f"selected_stride = {selected_stride}")
 print("========")
 
 for test_case in TEST_CASES:
-    (row, col, byte_size, is_col_major, orig_func) = test_case
+    (row, col, byte_size, is_col_major, user_data, orig_func) = test_case
 
     test_variant(
         row,
@@ -1803,6 +1932,7 @@ for test_case in TEST_CASES:
         selected_element,
         byte_size,
         is_col_major,
+        user_data,
         orig_func,
     )
 
