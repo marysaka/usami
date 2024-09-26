@@ -510,8 +510,7 @@ class EmulatorContext(object):
         src_type = src_info["type"]
 
         if src_type == "gpr":
-            assert offset == 0
-            return self.read_gpr(src_info["value"])
+            return self.read_gpr(src_info["value"]) + offset
         elif src_type == "pred":
             assert offset == 0
             return self.read_pred(src_info["value"])
