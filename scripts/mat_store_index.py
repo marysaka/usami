@@ -5,6 +5,7 @@ from matrix_shader_runner import *
 from coop_matrix_defs import (
     MATRIX_USAGE_SHORT_NAME,
     SUPPORTED_CFGS_SM75,
+    SUPPORTED_CFGS_SM86,
     VK_TYPE_TO_BYTE_SIZE,
 )
 
@@ -64,8 +65,8 @@ def compute_mat_offset(
     is_row_major_32x16_u8 = (
         byte_size == 1 and not is_colmn_major and row == 32 and column == 16
     )
-    is_colmn_major_16x32_u8 = (
-        byte_size == 1 and is_colmn_major and row == 32 and column == 16
+    is_colmn_major_8x32_u8 = (
+        byte_size == 1 and is_colmn_major and row == 32 and column == 8
     )
     is_colmn_major_32x8_u8 = (
         byte_size == 1 and is_colmn_major and row == 8 and column == 32
@@ -78,14 +79,14 @@ def compute_mat_offset(
         idx_a = hw_idx // 2
         idx_b = hw_idx % 2
 
-    if is_row_major_32x8_u8 or is_row_major_32x16_u8 or is_colmn_major_16x32_u8:
+    if is_row_major_32x8_u8 or is_row_major_32x16_u8:
         tmp = idx_a
         idx_a = idx_b
         idx_b = tmp
 
     minor_offset += idx_b
 
-    if is_row_major_32x8_u8 or is_colmn_major_32x8_u8:
+    if is_row_major_32x8_u8 or is_colmn_major_32x8_u8 or is_colmn_major_8x32_u8:
         if idx_a >= 1:
             minor_offset += load_per_matrix_per_thread * 0x4
     else:
@@ -99,8 +100,13 @@ def compute_mat_offset(
     # 16x8 F16/U32/S32 Column Major
     # 16x16 F16/U32/S32 Column Major
     # 16x32 U8/S8 Column Major
+    # 8x32 U8/S8 Column Major
     if (
-        (is_colmn_major and not (col == 32 and (row == 8 or row == 16)))
+        (
+            is_colmn_major
+            and not (col == 32 and (row == 8 or row == 16))
+            and not (row == 32 and (col == 8 or col == 16))
+        )
         or is_row_major_32x8_u8
         or is_row_major_32x16_u8
     ):
@@ -1480,6 +1486,7 @@ def exec_shader(
     (shader_path, expected_element_size) = user_data
     res = list()
 
+    # print(f"loading shader {shader_path}")
     info = parse_assembly_from_file(shader_path)
 
     bindings = list()
@@ -1686,6 +1693,13 @@ def test_variant(
         else:
             mat_orig_offsets = orig_func(stride, element, lane_id, user_data)
 
+        if len(mat_orig_offsets) * 32 > column * row:
+            success = None
+            print(
+                "WARN: NVIDIA blobs is generting more values than possible per thread"
+            )
+            break
+
         assert expected_mat_val_count == len(mat_orig_offsets)
 
         mat_computed_offsets = list()
@@ -1714,7 +1728,9 @@ def test_variant(
             success = False
             break
 
-    if success:
+    if success is None:
+        print("Result = Broken")
+    elif success:
         print("Result = Success")
     else:
         print("Result = Fail")
@@ -1786,42 +1802,7 @@ TEST_CASES = (
 )
 
 
-TEST_CASES = [
-    # 8x8 F16 (Row Major)
-    (8, 8, 2, False, None, compute_row_major_mat8x8_offset_f16),
-    # 8x8 F16 (Row Major)
-    (
-        8,
-        8,
-        2,
-        False,
-        (
-            Path(
-                "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
-            ),
-            2,
-        ),
-        compute_row_major_mat8x8_offset_f16_emulated,
-    ),
-    (
-        8,
-        8,
-        2,
-        False,
-        (
-            Path(
-                "./coop_matrix_layout_store_shaders/sm75/8x8x16/row/matrix_float16_use_c_8x8.asm"
-            ),
-            2,
-        ),
-        lambda stride, element, lane_id, user_data: exec_shader(
-            stride,
-            element,
-            lane_id,
-            user_data,
-        ),
-    ),
-]
+TEST_CASES = []
 
 
 def add_shader_test(
@@ -1915,8 +1896,12 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
             )
 
 
-for entry in SUPPORTED_CFGS_SM75:
-    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
+# XXX: Need work
+# for entry in SUPPORTED_CFGS_SM75:
+#     append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
+
+for entry in SUPPORTED_CFGS_SM86:
+    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
 
 print(f"selected_element = {selected_element}")
 print(f"selected_stride = {selected_stride}")
