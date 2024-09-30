@@ -31,6 +31,9 @@ HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
 
+# Some formats on SM75 are still broken:
+# - 8x8 (Column Major, 4b per element)
+# - 8x32 (Row Major, 1b per element)
 def compute_mat_offset(
     row: int,
     column: int,
@@ -70,6 +73,9 @@ def compute_mat_offset(
     )
     is_colmn_major_32x8_u8 = (
         byte_size == 1 and is_colmn_major and row == 8 and column == 32
+    )
+    is_colmn_major_8x8_u32 = (
+        byte_size == 4 and is_colmn_major and row == 8 and column == 8
     )
 
     idx_a = hw_idx // load_per_matrix_per_thread
@@ -1563,9 +1569,26 @@ def exec_shader(
 
         return value & element_mask
 
+    def is_float_value_valid(val: int, val_size: int) -> bool:
+        if val_size == 4:
+            return val == 0x3F800000 or val == 0x00000001
+        elif val_size == 2:
+            return val == 0x3C003C00 or val == 0x3C00
+        elif val_size == 1:
+            return val == 0x1010101 or val == 0x0101 or val == 0x01
+
+        raise Exception(f"Unknown val_size {val_size}")
+
     def write_global_value(address: int, value: int, element_size: int):
         byte_element_size = element_size // 8
         base_offset = address % 0x100000
+
+        if not is_float_value_valid(value, expected_element_size):
+            print(
+                "WARN: Impossible values reported on write! Is the interpreter drunk?"
+            )
+            print((hex(value), expected_element_size))
+            print(shader_path)
 
         for i in range(byte_element_size // expected_element_size):
             offset = base_offset + i * expected_element_size
@@ -1696,7 +1719,7 @@ def test_variant(
         if len(mat_orig_offsets) * 32 > column * row:
             success = None
             print(
-                "WARN: NVIDIA blobs is generting more values than possible per thread"
+                "WARN: NVIDIA blobs is generating more values than possible per thread"
             )
             break
 
@@ -1897,8 +1920,8 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 
 
 # XXX: Need work
-# for entry in SUPPORTED_CFGS_SM75:
-#     append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
+for entry in SUPPORTED_CFGS_SM75:
+    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
 
 for entry in SUPPORTED_CFGS_SM86:
     append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)

@@ -244,9 +244,12 @@ def do_stg(ctx: "EmulatorContext", info: InstrInfo):
     element_size = min(store_size, 32)
     src0 = ctx.read_from_src(info.args[0])
 
+    orig_src1 = parse_src_text(info.args[1])
+
     for element_idx in range(store_size // 32):
-        src1 = ctx.read_from_src(info.args[1], element_idx * 4)
+        src1 = ctx.read_from_src_info(orig_src1, 0, element_size)
         ctx.global_write_callback(src0 + element_idx * 4, src1, element_size)
+        orig_src1["value"] = orig_src1["value"] + 1
 
 
 def lop3_lut(x: int, y: int, z: int, lut: int) -> int:
