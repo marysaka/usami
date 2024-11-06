@@ -76,13 +76,12 @@ def compute_mat_offset_new(
     value_per_32_reg = 4 // byte_size
 
     (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-        lane_id, hw_idx % 4, not is_colmn_major
+        lane_id, hw_idx % 4, True
     )
     if is_colmn_major:
         # TODO: Broken
         major_offset = target_col * stride
         minor_offset = target_row
-        print((target_row, target_col))
     else:
         major_offset = target_row * stride
         minor_offset = target_col
