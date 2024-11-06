@@ -31,6 +31,7 @@ HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
 
+# 16x8x8 and 16x8x16 follow the same layout mostly
 def compute_16x8x16_target_by_lane_id(
     lane_id: int, idx: int, short_usage: str, byte_size: int
 ) -> Tuple[int, int]:
@@ -57,57 +58,34 @@ def compute_16x8x16_target_by_lane_id(
     return (row, col)
 
 
-def compute_16x8x8_target_by_lane_id(
-    lane_id: int, idx: int, short_usage: str, byte_size: int
-) -> Tuple[int, int]:
-    group_id = lane_id >> 2
-    thread_id_in_group = lane_id % 4
-    row = 0
-    col = 0
-
-    if short_usage == "use_a" or short_usage == "use_c":
-        if idx == 0 or idx == 1:
-            row = group_id
-        elif idx == 2 or idx == 3:
-            row = group_id + 8
-        col = thread_id_in_group * 2 + (idx & 1)
-    elif short_usage == "use_b":
-        row = (thread_id_in_group * byte_size) + idx
-        col = group_id
-    else:
-        raise Exception("BROKEN")
-
-    return (row, col)
-
-
 def compute_mat_offset_new(
     row: int,
     column: int,
     stride: int,
     element: int,
-    byte_size: int,
+    vk_type: str,
     lane_id: int,
     hw_idx: int,
     is_colmn_major: bool,
     short_usage: str,
     matrix_layout_name: str,
 ) -> int:
+    byte_size = VK_TYPE_TO_BYTE_SIZE[vk_type]
     mat_store_base_addr = mat_store_addr + element * byte_size
 
     element_count = (row * column) // 32
 
     value_per_32_reg = 4 // byte_size
 
-    if matrix_layout_name == "16x8x16" or matrix_layout_name == "16x16x16":
+    target_row = 0
+    target_col = 0
+
+    if matrix_layout_name in ["16x8x8", "16x8x16", "16x16x16"] and vk_type in ["FLOAT16", "FLOAT32"]:
         (target_row, target_col) = compute_16x8x16_target_by_lane_id(
             lane_id, hw_idx % 4, short_usage, byte_size
         )
-    elif matrix_layout_name == "16x8x8":
-        (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-            lane_id, hw_idx % 4, short_usage, byte_size
-        )
     else:
-        raise Exception(f"Unknown matrix layout {matrix_layout_name}")
+        raise Exception(f"Unknown matrix layout {matrix_layout_name} with {vk_type}")
 
     if is_colmn_major:
         major_offset = target_col * stride
@@ -275,7 +253,6 @@ def exec_shader(
         if special_reg_name == "SR_LANEID":
             return lane_id
 
-        print(special_reg_name)
         assert special_reg_name == "SR_LANEID"
 
         return 0
@@ -428,7 +405,7 @@ def test_variant(
     column: int,
     stride: int,
     element: int,
-    byte_size: int,
+    vk_type: int,
     is_col_major: bool,
     short_usage: str,
     matrix_layout_name: str,
@@ -438,9 +415,9 @@ def test_variant(
     success = True
 
     if is_col_major:
-        print(f"{column}x{row} (Column Major, {short_usage}, {byte_size}b per element)")
+        print(f"{column}x{row} (Column Major, {short_usage}, {vk_type}, {matrix_layout_name})")
     else:
-        print(f"{row}x{column} (Row Major, {short_usage}, {byte_size}b per element)")
+        print(f"{row}x{column} (Row Major, {short_usage}, {vk_type}, {matrix_layout_name})")
 
     expected_mat_val_count = (column * row) // 32
 
@@ -467,7 +444,7 @@ def test_variant(
                 col,
                 stride,
                 element,
-                byte_size,
+                vk_type,
                 lane_id,
                 i,
                 is_col_major,
@@ -529,11 +506,11 @@ def add_shader_test(
             print("MOVM in use, ignoring")
             return
 
-    # (row, col, byte_size, is_col_major, short_usage, matrix_layout_name, user_data, orig_func)
+    # (row, col, vk_type, is_col_major, short_usage, matrix_layout_name, user_data, orig_func)
     new_entry = (
         row,
         col,
-        byte_size,
+        vk_type,
         is_col_major,
         short_usage,
         matrix_layout_name,
@@ -688,7 +665,7 @@ for test_case in TEST_CASES:
     (
         row,
         col,
-        byte_size,
+        vk_type,
         is_col_major,
         short_usage,
         matrix_layout_name,
@@ -701,7 +678,7 @@ for test_case in TEST_CASES:
         col,
         selected_stride,
         selected_element,
-        byte_size,
+        vk_type,
         is_col_major,
         short_usage,
         matrix_layout_name,
