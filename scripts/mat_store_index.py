@@ -31,6 +31,73 @@ HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
 
+def compute_16x8x8_target_by_lane_id(
+    lane_id: int, idx: int, is_type_a: bool
+) -> Tuple[int, int]:
+    group_id = lane_id >> 2
+    thread_id_in_group = lane_id % 4
+    row = 0
+    col = 0
+
+    if is_type_a:
+        if idx == 0 or idx == 1:
+            row = group_id
+        elif idx == 2 or idx == 3:
+            row = group_id + 8
+        col = thread_id_in_group * 2 + (idx & 1)
+    else:
+        if idx == 0 or idx == 2:
+            row = group_id
+        elif idx == 1 or idx == 3:
+            row = group_id + 8
+
+        if idx == 0 or idx == 1:
+            col = thread_id_in_group
+        elif idx == 2 or idx == 3:
+            col = thread_id_in_group + 4
+
+    return (row, col)
+
+
+def compute_mat_offset_new(
+    row: int,
+    column: int,
+    stride: int,
+    element: int,
+    byte_size: int,
+    lane_id: int,
+    hw_idx: int,
+    is_colmn_major: bool,
+) -> int:
+    mat_store_base_addr = mat_store_addr + element * byte_size
+
+    element_count = (row * column) // 32
+
+    value_per_32_reg = 4 // byte_size
+
+    (target_row, target_col) = compute_16x8x8_target_by_lane_id(
+        lane_id, hw_idx % 4, not is_colmn_major
+    )
+    if is_colmn_major:
+        # TODO: Broken
+        major_offset = target_col * stride
+        minor_offset = target_row
+        print((target_row, target_col))
+    else:
+        major_offset = target_row * stride
+        minor_offset = target_col
+
+    offset = (major_offset + minor_offset) * byte_size
+
+    if is_colmn_major:
+        # TODO: Broken
+        offset += (hw_idx // 4) * 8 * byte_size
+    else:
+        offset += (hw_idx // 4) * 8 * byte_size
+
+    return mat_store_base_addr + offset
+
+
 # Some formats on SM75 are still broken:
 # - 8x8 (Column Major, 4b per element)
 # - 8x32 (Row Major, 1b per element)
@@ -73,9 +140,6 @@ def compute_mat_offset(
     )
     is_colmn_major_32x8_u8 = (
         byte_size == 1 and is_colmn_major and row == 8 and column == 32
-    )
-    is_colmn_major_8x8_u32 = (
-        byte_size == 4 and is_colmn_major and row == 8 and column == 8
     )
 
     idx_a = hw_idx // load_per_matrix_per_thread
@@ -1728,7 +1792,7 @@ def test_variant(
         mat_computed_offsets = list()
 
         for i in range(expected_mat_val_count):
-            value = compute_mat_offset(
+            value = compute_mat_offset_new(
                 row,
                 col,
                 stride,
@@ -1763,8 +1827,8 @@ def test_variant(
 selected_element = 69
 selected_stride = 123
 
-# selected_element = 0
-# selected_stride = 512
+selected_element = 0
+selected_stride = 1
 
 # 16x8
 TEST_CASES_16x8 = [
@@ -1851,8 +1915,9 @@ def add_shader_test(
 
     for instr in info.values():
         if "MOVM" in instr:
-            print("MOVM in use, ignoring test case...")
-            return
+            print((col, row, is_col_major))
+            print("MOVM in use, ignore transposing as we don't support it right now...")
+            is_col_major = not is_col_major
 
     # (row, col, byte_size, is_col_major, user_data, orig_func)
     TEST_CASES.append(
@@ -1920,10 +1985,26 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 
 
 # XXX: Need work
-for entry in SUPPORTED_CFGS_SM75:
-    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
+# for entry in SUPPORTED_CFGS_SM75:
+#    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
 
-for entry in SUPPORTED_CFGS_SM86:
+# for entry in SUPPORTED_CFGS_SM86:
+#    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
+
+SUPPORTED_CFG_DEBUG = [
+    {
+        "m_size": 16,
+        "n_size": 16,
+        "k_size": 16,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT32",
+        "result_type": "FLOAT32",
+        "saturating_accumulation": 0,
+    },
+]
+
+for entry in SUPPORTED_CFG_DEBUG:
     append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
 
 print(f"selected_element = {selected_element}")

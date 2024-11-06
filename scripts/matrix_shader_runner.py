@@ -377,6 +377,13 @@ def do_lea(ctx: "EmulatorContext", info: InstrInfo):
     ctx.set_dst(info.args[0], res)
 
 
+def do_movm(ctx: "EmulatorContext", info: InstrInfo):
+    # FIXME: Invalid but will do for now
+    src0 = ctx.read_from_src(info.args[1])
+    ctx.set_dst(info.args[0], src0)
+    #print(info.raw)
+    pass
+
 INSTRS_LUT = {
     "IMAD": do_imad,
     "IADD3": do_iadd3,
@@ -393,6 +400,7 @@ INSTRS_LUT = {
     "PRMT": do_prmt,
     "SHF": do_shf,
     "LEA": do_lea,
+    "MOVM": do_movm,
 }
 
 
