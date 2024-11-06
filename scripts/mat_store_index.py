@@ -32,20 +32,20 @@ THREAD_COUNT = 32
 
 
 def compute_16x8x8_target_by_lane_id(
-    lane_id: int, idx: int, is_type_a: bool
+    lane_id: int, idx: int, short_usage: str
 ) -> Tuple[int, int]:
     group_id = lane_id >> 2
     thread_id_in_group = lane_id % 4
     row = 0
     col = 0
 
-    if is_type_a:
+    if short_usage == "use_a" or short_usage == "use_c":
         if idx == 0 or idx == 1:
             row = group_id
         elif idx == 2 or idx == 3:
             row = group_id + 8
         col = thread_id_in_group * 2 + (idx & 1)
-    else:
+    elif short_usage == "use_b":
         if idx == 0 or idx == 2:
             row = group_id
         elif idx == 1 or idx == 3:
@@ -55,6 +55,8 @@ def compute_16x8x8_target_by_lane_id(
             col = thread_id_in_group
         elif idx == 2 or idx == 3:
             col = thread_id_in_group + 4
+    else:
+        raise Exception("BROKEN")
 
     return (row, col)
 
@@ -68,6 +70,7 @@ def compute_mat_offset_new(
     lane_id: int,
     hw_idx: int,
     is_colmn_major: bool,
+    short_usage: str,
 ) -> int:
     mat_store_base_addr = mat_store_addr + element * byte_size
 
@@ -76,7 +79,7 @@ def compute_mat_offset_new(
     value_per_32_reg = 4 // byte_size
 
     (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-        lane_id, hw_idx % 4, True
+        lane_id, hw_idx % 4, short_usage
     )
     if is_colmn_major:
         # TODO: Broken
@@ -401,15 +404,16 @@ def test_variant(
     element: int,
     byte_size: int,
     is_col_major: bool,
+    short_usage: str,
     user_data: object,
     orig_func,
 ) -> bool:
     success = True
 
     if is_col_major:
-        print(f"{column}x{row} (Column Major, {byte_size}b per element)")
+        print(f"{column}x{row} (Column Major, {short_usage}, {byte_size}b per element)")
     else:
-        print(f"{row}x{column} (Row Major, {byte_size}b per element)")
+        print(f"{row}x{column} (Row Major, {short_usage}, {byte_size}b per element)")
 
     expected_mat_val_count = (column * row) // 32
 
@@ -440,6 +444,7 @@ def test_variant(
                 lane_id,
                 i,
                 is_col_major,
+                short_usage,
             )
             mat_computed_offsets.append(value)
 
@@ -484,6 +489,7 @@ def add_shader_test(
     short_usage = MATRIX_USAGE_SHORT_NAME[usage]
     shader_name = f"matrix_{vk_type.lower()}_{short_usage}_{row}x{col}.asm"
     full_path = output_directory.joinpath(shader_name)
+    print(full_path)
 
     is_col_major = layout_name == "column"
 
@@ -496,12 +502,12 @@ def add_shader_test(
     for instr in info.values():
         if "MOVM" in instr:
             print((col, row, vk_type, is_col_major))
-            print("MOVM in use, ignore transposing as we don't support it right now...")
-            is_col_major = not is_col_major
+            print("MOVM in use, ignoring")
+            return
 
-    # (row, col, byte_size, is_col_major, user_data, orig_func)
+    # (row, col, byte_size, is_col_major, short_usage, user_data, orig_func)
     TEST_CASES.append(
-        (row, col, byte_size, is_col_major, (full_path, byte_size), case_lambda)
+        (row, col, byte_size, is_col_major, short_usage, (full_path, byte_size), case_lambda)
     )
 
 
@@ -592,7 +598,7 @@ print(f"selected_stride = {selected_stride}")
 print("========")
 
 for test_case in TEST_CASES:
-    (row, col, byte_size, is_col_major, user_data, orig_func) = test_case
+    (row, col, byte_size, is_col_major, short_usage, user_data, orig_func) = test_case
 
     test_variant(
         row,
@@ -601,6 +607,7 @@ for test_case in TEST_CASES:
         selected_element,
         byte_size,
         is_col_major,
+        short_usage,
         user_data,
         orig_func,
     )
