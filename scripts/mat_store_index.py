@@ -73,10 +73,6 @@ def compute_mat_offset_new(
     byte_size = VK_TYPE_TO_BYTE_SIZE[vk_type]
     mat_store_base_addr = mat_store_addr + element * byte_size
 
-    element_count = (row * column) // 32
-
-    value_per_32_reg = 4 // byte_size
-
     target_row = 0
     target_col = 0
 
@@ -97,7 +93,7 @@ def compute_mat_offset_new(
     offset = (major_offset + minor_offset) * byte_size
 
     if is_colmn_major:
-        offset += (hw_idx // 4) * 8 * byte_size
+        offset += (hw_idx // 4) * 8 * stride * byte_size
     else:
         offset += (hw_idx // 4) * 8 * byte_size
 
@@ -476,8 +472,8 @@ def test_variant(
 selected_element = 69
 selected_stride = 123
 
-selected_element = 0
-selected_stride = 1
+selected_element = 50
+selected_stride = 200
 
 TEST_CASES = []
 
