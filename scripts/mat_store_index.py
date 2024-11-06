@@ -45,15 +45,11 @@ def compute_16x8x16_target_by_lane_id(
             row = group_id + 8
         col = thread_id_in_group * 2 + (idx & 1)
     elif short_usage == "use_b":
-        if idx == 0 or idx == 2:
-            row = group_id
-        elif idx == 1 or idx == 3:
-            row = group_id + 8
+        row = thread_id_in_group * 2 + (idx & 1)
+        if idx >= 2:
+            row += 8
 
-        if idx == 0 or idx == 1:
-            col = thread_id_in_group
-        elif idx == 2 or idx == 3:
-            col = thread_id_in_group + 4
+        col = group_id
     else:
         raise Exception("BROKEN")
 
@@ -100,9 +96,15 @@ def compute_mat_offset_new(
 
     value_per_32_reg = 4 // byte_size
 
-    (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-        lane_id, hw_idx % 4, short_usage, byte_size
-    )
+    if short_usage == "use_b" and (column == 16 or row == 16):
+        (target_row, target_col) = compute_16x8x16_target_by_lane_id(
+            lane_id, hw_idx % 4, short_usage, byte_size
+        )
+    else:
+        (target_row, target_col) = compute_16x8x8_target_by_lane_id(
+            lane_id, hw_idx % 4, short_usage, byte_size
+        )
+
     if is_colmn_major:
         major_offset = target_col * stride
         minor_offset = target_row
@@ -671,19 +673,6 @@ SUPPORTED_CFG_DEBUG = [
         "b_type": "FLOAT16",
         "c_type": "FLOAT32",
         "result_type": "FLOAT32",
-        "saturating_accumulation": 0,
-    },
-]
-
-SUPPORTED_CFG_DEBUG = [
-    {
-        "m_size": 16,
-        "n_size": 16,
-        "k_size": 16,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT16",
-        "result_type": "FLOAT16",
         "saturating_accumulation": 0,
     },
 ]
