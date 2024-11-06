@@ -30,9 +30,8 @@ LOAD_PER_MATRIX_PER_THREAD_U8 = 4
 HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
-
-def compute_16x8x8_target_by_lane_id(
-    lane_id: int, idx: int, short_usage: str
+def compute_16x8x16_target_by_lane_id(
+    lane_id: int, idx: int, short_usage: str, byte_size: int
 ) -> Tuple[int, int]:
     group_id = lane_id >> 2
     thread_id_in_group = lane_id % 4
@@ -61,6 +60,29 @@ def compute_16x8x8_target_by_lane_id(
     return (row, col)
 
 
+def compute_16x8x8_target_by_lane_id(
+    lane_id: int, idx: int, short_usage: str, byte_size: int
+) -> Tuple[int, int]:
+    group_id = lane_id >> 2
+    thread_id_in_group = lane_id % 4
+    row = 0
+    col = 0
+
+    if short_usage == "use_a" or short_usage == "use_c":
+        if idx == 0 or idx == 1:
+            row = group_id
+        elif idx == 2 or idx == 3:
+            row = group_id + 8
+        col = thread_id_in_group * 2 + (idx & 1)
+    elif short_usage == "use_b":
+        row = (thread_id_in_group * byte_size) + idx
+        col = group_id
+    else:
+        raise Exception("BROKEN")
+
+    return (row, col)
+
+
 def compute_mat_offset_new(
     row: int,
     column: int,
@@ -79,10 +101,9 @@ def compute_mat_offset_new(
     value_per_32_reg = 4 // byte_size
 
     (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-        lane_id, hw_idx % 4, short_usage
+        lane_id, hw_idx % 4, short_usage, byte_size
     )
     if is_colmn_major:
-        # TODO: Broken
         major_offset = target_col * stride
         minor_offset = target_row
     else:
@@ -92,7 +113,6 @@ def compute_mat_offset_new(
     offset = (major_offset + minor_offset) * byte_size
 
     if is_colmn_major:
-        # TODO: Broken
         offset += (hw_idx // 4) * 8 * byte_size
     else:
         offset += (hw_idx // 4) * 8 * byte_size
@@ -493,10 +513,6 @@ def add_shader_test(
 
     is_col_major = layout_name == "column"
 
-    case_lambda = lambda stride, element, lane_id, user_data: exec_shader(
-        stride, element, lane_id, user_data
-    )
-
     info = parse_assembly_from_file(full_path)
 
     for instr in info.values():
@@ -506,9 +522,28 @@ def add_shader_test(
             return
 
     # (row, col, byte_size, is_col_major, short_usage, user_data, orig_func)
-    TEST_CASES.append(
-        (row, col, byte_size, is_col_major, short_usage, (full_path, byte_size), case_lambda)
+    new_entry = (
+        row,
+        col,
+        byte_size,
+        is_col_major,
+        short_usage,
+        (full_path, byte_size),
+        exec_shader,
     )
+
+    if new_entry not in TEST_CASES:
+        TEST_CASES.append(
+            (
+                row,
+                col,
+                byte_size,
+                is_col_major,
+                short_usage,
+                (full_path, byte_size),
+                exec_shader,
+            )
+        )
 
 
 def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
@@ -584,8 +619,71 @@ SUPPORTED_CFG_DEBUG = [
         "k_size": 16,
         "a_type": "FLOAT16",
         "b_type": "FLOAT16",
+        "c_type": "FLOAT16",
+        "result_type": "FLOAT16",
+        "saturating_accumulation": 0,
+    },
+    {
+        "m_size": 16,
+        "n_size": 8,
+        "k_size": 16,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT16",
+        "result_type": "FLOAT16",
+        "saturating_accumulation": 0,
+    },
+    {
+        "m_size": 16,
+        "n_size": 8,
+        "k_size": 8,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT16",
+        "result_type": "FLOAT16",
+        "saturating_accumulation": 0,
+    },
+    {
+        "m_size": 16,
+        "n_size": 16,
+        "k_size": 16,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
         "c_type": "FLOAT32",
         "result_type": "FLOAT32",
+        "saturating_accumulation": 0,
+    },
+    {
+        "m_size": 16,
+        "n_size": 8,
+        "k_size": 16,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT32",
+        "result_type": "FLOAT32",
+        "saturating_accumulation": 0,
+    },
+    {
+        "m_size": 16,
+        "n_size": 8,
+        "k_size": 8,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT32",
+        "result_type": "FLOAT32",
+        "saturating_accumulation": 0,
+    },
+]
+
+SUPPORTED_CFG_DEBUG = [
+    {
+        "m_size": 16,
+        "n_size": 16,
+        "k_size": 16,
+        "a_type": "FLOAT16",
+        "b_type": "FLOAT16",
+        "c_type": "FLOAT16",
+        "result_type": "FLOAT16",
         "saturating_accumulation": 0,
     },
 ]
