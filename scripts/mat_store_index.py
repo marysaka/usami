@@ -30,6 +30,7 @@ LOAD_PER_MATRIX_PER_THREAD_U8 = 4
 HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
+
 def compute_16x8x16_target_by_lane_id(
     lane_id: int, idx: int, short_usage: str, byte_size: int
 ) -> Tuple[int, int]:
@@ -89,6 +90,7 @@ def compute_mat_offset_new(
     hw_idx: int,
     is_colmn_major: bool,
     short_usage: str,
+    matrix_layout_name: str,
 ) -> int:
     mat_store_base_addr = mat_store_addr + element * byte_size
 
@@ -96,14 +98,16 @@ def compute_mat_offset_new(
 
     value_per_32_reg = 4 // byte_size
 
-    if short_usage == "use_b" and (column == 16 or row == 16):
+    if matrix_layout_name == "16x8x16" or matrix_layout_name == "16x16x16":
         (target_row, target_col) = compute_16x8x16_target_by_lane_id(
             lane_id, hw_idx % 4, short_usage, byte_size
         )
-    else:
+    elif matrix_layout_name == "16x8x8":
         (target_row, target_col) = compute_16x8x8_target_by_lane_id(
             lane_id, hw_idx % 4, short_usage, byte_size
         )
+    else:
+        raise Exception(f"Unknown matrix layout {matrix_layout_name}")
 
     if is_colmn_major:
         major_offset = target_col * stride
@@ -427,6 +431,7 @@ def test_variant(
     byte_size: int,
     is_col_major: bool,
     short_usage: str,
+    matrix_layout_name: str,
     user_data: object,
     orig_func,
 ) -> bool:
@@ -467,6 +472,7 @@ def test_variant(
                 i,
                 is_col_major,
                 short_usage,
+                matrix_layout_name,
             )
             mat_computed_offsets.append(value)
 
@@ -506,12 +512,12 @@ def add_shader_test(
     col: int,
     usage: str,
     layout_name: str,
+    matrix_layout_name: str,
 ):
     byte_size = VK_TYPE_TO_BYTE_SIZE[vk_type]
     short_usage = MATRIX_USAGE_SHORT_NAME[usage]
     shader_name = f"matrix_{vk_type.lower()}_{short_usage}_{row}x{col}.asm"
     full_path = output_directory.joinpath(shader_name)
-    print(full_path)
 
     is_col_major = layout_name == "column"
 
@@ -523,29 +529,20 @@ def add_shader_test(
             print("MOVM in use, ignoring")
             return
 
-    # (row, col, byte_size, is_col_major, short_usage, user_data, orig_func)
+    # (row, col, byte_size, is_col_major, short_usage, matrix_layout_name, user_data, orig_func)
     new_entry = (
         row,
         col,
         byte_size,
         is_col_major,
         short_usage,
+        matrix_layout_name,
         (full_path, byte_size),
         exec_shader,
     )
 
     if new_entry not in TEST_CASES:
-        TEST_CASES.append(
-            (
-                row,
-                col,
-                byte_size,
-                is_col_major,
-                short_usage,
-                (full_path, byte_size),
-                exec_shader,
-            )
-        )
+        TEST_CASES.append(new_entry)
 
 
 def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
@@ -556,13 +553,13 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
     m_size = entry["m_size"]
     n_size = entry["n_size"]
     k_size = entry["k_size"]
-    matrix_name = f"{m_size}x{n_size}x{k_size}"
+    matrix_layout_name = f"{m_size}x{n_size}x{k_size}"
 
     for layout_name, store_layout in [
         ("row", "gl_CooperativeMatrixLayoutRowMajor"),
         ("column", "gl_CooperativeMatrixLayoutColumnMajor"),
     ]:
-        final_output_directory = output_directory.joinpath(matrix_name).joinpath(
+        final_output_directory = output_directory.joinpath(matrix_layout_name).joinpath(
             layout_name
         )
 
@@ -575,6 +572,7 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
             k_size,
             "gl_MatrixUseA",
             layout_name,
+            matrix_layout_name,
         )
         # KxN (B)
         add_shader_test(
@@ -584,6 +582,7 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
             n_size,
             "gl_MatrixUseB",
             layout_name,
+            matrix_layout_name,
         )
         # MxN (C)
         add_shader_test(
@@ -593,6 +592,7 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
             n_size,
             "gl_MatrixUseAccumulator",
             layout_name,
+            matrix_layout_name,
         )
 
         # MxN (D)
@@ -685,7 +685,16 @@ print(f"selected_stride = {selected_stride}")
 print("========")
 
 for test_case in TEST_CASES:
-    (row, col, byte_size, is_col_major, short_usage, user_data, orig_func) = test_case
+    (
+        row,
+        col,
+        byte_size,
+        is_col_major,
+        short_usage,
+        matrix_layout_name,
+        user_data,
+        orig_func,
+    ) = test_case
 
     test_variant(
         row,
@@ -695,6 +704,7 @@ for test_case in TEST_CASES:
         byte_size,
         is_col_major,
         short_usage,
+        matrix_layout_name,
         user_data,
         orig_func,
     )
