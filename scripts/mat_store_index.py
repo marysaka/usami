@@ -59,8 +59,6 @@ def compute_16x8x16_target_by_lane_id(
 
 
 def compute_mat_offset_new(
-    row: int,
-    column: int,
     stride: int,
     element: int,
     vk_type: str,
@@ -436,8 +434,6 @@ def test_variant(
 
         for i in range(expected_mat_val_count):
             value = compute_mat_offset_new(
-                row,
-                col,
                 stride,
                 element,
                 vk_type,
