@@ -33,7 +33,7 @@ THREAD_COUNT = 32
 
 # 16x8x8 and 16x8x16 follow the same layout mostly
 def compute_16x8x16_target_by_lane_id(
-    lane_id: int, idx: int, short_usage: str, byte_size: int
+    lane_id: int, idx: int, short_usage: str
 ) -> Tuple[int, int]:
     group_id = lane_id >> 2
     thread_id_in_group = lane_id % 4
@@ -76,10 +76,13 @@ def compute_mat_offset_new(
 
     if matrix_layout_name in ["16x8x8", "16x8x16", "16x16x16"] and vk_type in ["FLOAT16", "FLOAT32"]:
         (target_row, target_col) = compute_16x8x16_target_by_lane_id(
-            lane_id, hw_idx % 4, short_usage, byte_size
+            lane_id, hw_idx % 4, short_usage
         )
     else:
         raise Exception(f"Unknown matrix layout {matrix_layout_name} with {vk_type}")
+
+    # Adjust for bigger mats
+    target_col += (hw_idx // 4) * 8
 
     if is_colmn_major:
         major_offset = target_col * stride
@@ -89,11 +92,6 @@ def compute_mat_offset_new(
         minor_offset = target_col
 
     offset = (major_offset + minor_offset) * byte_size
-
-    if is_colmn_major:
-        offset += (hw_idx // 4) * 8 * stride * byte_size
-    else:
-        offset += (hw_idx // 4) * 8 * byte_size
 
     return mat_store_base_addr + offset
 
