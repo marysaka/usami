@@ -4,22 +4,10 @@ use std::{
 };
 
 use ash::{
-    ext::debug_utils::Device as DebugUtilsDevice,
+    ext::{debug_utils::Device as DebugUtilsDevice, image_robustness},
     prelude::*,
     vk::{
-        self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle,
-        DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-        Extent2D, Extent3D, Format,
-        FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange,
-        ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType,
-        MemoryPropertyFlags, PhysicalDevice,
-        PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR,
-        PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures, PhysicalDeviceFeatures2,
-        PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT,
-        PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT,
-        PhysicalDeviceTransformFeedbackFeaturesEXT, PhysicalDeviceVulkan11Features,
-        PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFamilyProperties,
-        Rect2D, SampleCountFlags, SharingMode, Viewport,
+        self, BufferCreateFlags, BufferUsageFlags, ComponentMapping, ComponentSwizzle, DebugUtilsObjectNameInfoEXT, DeviceCreateInfo, DeviceQueueCreateInfo, Extent2D, Extent3D, Format, FramebufferCreateInfo, ImageAspectFlags, ImageCreateInfo, ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, MemoryPropertyFlags, PhysicalDevice, PhysicalDeviceConditionalRenderingFeaturesEXT, PhysicalDeviceCooperativeMatrixFeaturesKHR, PhysicalDeviceCooperativeMatrixFeaturesNV, PhysicalDeviceFeatures, PhysicalDeviceFeatures2, PhysicalDeviceImageRobustnessFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceMeshShaderFeaturesEXT, PhysicalDeviceProperties, PhysicalDeviceShaderObjectFeaturesEXT, PhysicalDeviceTransformFeedbackFeaturesEXT, PhysicalDeviceVulkan11Features, PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, QueueFamilyProperties, Rect2D, SampleCountFlags, SharingMode, Viewport
     },
 };
 
@@ -88,6 +76,7 @@ impl UsamiDevice {
         let mut has_xfb_extension = false;
         let mut has_cooperative_matrix = false;
         let mut has_cooperative_matrix_nv = false;
+        let mut has_image_robustness = false;
 
         for extension in &extensions_cstring {
             if ash::ext::shader_object::NAME == extension.as_c_str() {
@@ -112,6 +101,10 @@ impl UsamiDevice {
 
             if ash::nv::cooperative_matrix::NAME == extension.as_c_str() {
                 has_cooperative_matrix_nv = true;
+            }
+
+            if ash::ext::image_robustness::NAME == extension.as_c_str() {
+                has_image_robustness = true;
             }
         }
 
@@ -153,6 +146,9 @@ impl UsamiDevice {
         let mut cooperative_matrix_nv_features =
             PhysicalDeviceCooperativeMatrixFeaturesNV::default().cooperative_matrix(true);
 
+        let mut image_robustness_features =
+            PhysicalDeviceImageRobustnessFeatures::default().robust_image_access(true);
+
         let mut create_info = DeviceCreateInfo::default()
             .queue_create_infos(&device_queue_create_info)
             .enabled_features(&enabled_features)
@@ -180,6 +176,10 @@ impl UsamiDevice {
 
         if has_cooperative_matrix_nv {
             create_info = create_info.push_next(&mut cooperative_matrix_nv_features);
+        }
+
+        if has_image_robustness {
+            create_info = create_info.push_next(&mut image_robustness_features);
         }
 
         let mut vk11_features = PhysicalDeviceVulkan11Features::default();
