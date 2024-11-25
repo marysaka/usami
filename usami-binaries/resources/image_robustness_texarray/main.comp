@@ -9,11 +9,29 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout (r32f, set = 0, binding = 0) uniform image1D u_image;
 layout(set = 0, binding = 1) uniform sampler2DArray u_tex;
 
+#define INVALID_ARRAY_IDX 0xFFFF
+
+void store_data(int vec_pos, vec4 data)
+{
+	int pos = vec_pos * 4;
+	imageStore(u_image, pos + 0, vec4(data.x));
+	imageStore(u_image, pos + 1, vec4(data.y));
+	imageStore(u_image, pos + 2, vec4(data.z));
+	imageStore(u_image, pos + 3, vec4(data.w));
+}
+
+
+#define POSITION_X 0
+#define POSITION_Y 0
+#define POSITION_Z 1
+#define POSITION_VEC3 vec3(POSITION_X, POSITION_Y, POSITION_Z)
+#define POSITION_IVEC3 ivec3(POSITION_X, POSITION_Y, POSITION_Z)
+
 void main (void)
 {
-	// In bounds (array)
-	imageStore(u_image, 0, texelFetch(u_tex, ivec3(0, 0, 0), 0));
-	imageStore(u_image, 1, texelFetch(u_tex, ivec3(0, 0, 1), 0));
-	// Out of bounds (array)
-	imageStore(u_image, 2, texelFetch(u_tex, ivec3(0, 0, 2), 0));
+	// Test oob array
+	store_data(0, texelFetch(u_tex, POSITION_IVEC3, 0));
+	store_data(1, texture(u_tex, POSITION_VEC3));
+	store_data(2, textureLod(u_tex, POSITION_VEC3, 0.0f));
+	store_data(3, textureGrad(u_tex, POSITION_VEC3, ivec2(1.0, 0), ivec2(1.0, 0)));
 }

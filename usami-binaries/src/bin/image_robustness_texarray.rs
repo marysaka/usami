@@ -345,13 +345,15 @@ fn main() -> VkResult<()> {
 
     let output_readback_raw_buffer = output_readback_buffer.device_memory.read_to_vec()?;
 
-    for i in 0..3 {
-        let val = f32::from_le_bytes(
-            output_readback_raw_buffer[(i) * 4..(i + 1) * 4]
-                .try_into()
-                .unwrap(),
-        );
-        println!("val{i}: {val}");
+    let vec_count = 4;
+
+    for vec_idx in 0..vec_count {
+        let base_data = &output_readback_raw_buffer[vec_idx * 16..(vec_idx + 1) * 16];
+        for i in 0..4 {
+            let val = f32::from_le_bytes(base_data[(i) * 4..(i + 1) * 4].try_into().unwrap());
+            println!("vec[{vec_idx}][{i}]: {val}");
+        }
+        println!();
     }
 
     Ok(())
