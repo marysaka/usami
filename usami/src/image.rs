@@ -194,9 +194,9 @@ impl UsamiDevice {
         let image_create_info = ImageCreateInfo::default()
             .image_type(ImageType::TYPE_2D)
             .format(raw_image.format)
-            .extent(raw_image.level_infos[0].extent)
+            .extent(raw_image.level_infos[0].layers[0].extent)
             .mip_levels(raw_image.level_count() as u32)
-            .array_layers(1)
+            .array_layers(raw_image.layer_count() as u32)
             .initial_layout(ImageLayout::UNDEFINED)
             .samples(SampleCountFlags::TYPE_1)
             .tiling(ImageTiling::OPTIMAL)
@@ -232,20 +232,25 @@ impl UsamiDevice {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct RawImageLevelInfo {
+pub struct RawImageArrayInfo {
     pub extent: Extent3D,
     pub start_position: usize,
 }
 
-impl RawImageLevelInfo {
-    pub fn buffer_copy(&self, aspect_mask: ImageAspectFlags, mip_level: u32) -> BufferImageCopy {
+impl RawImageArrayInfo {
+    pub fn buffer_copy(
+        &self,
+        aspect_mask: ImageAspectFlags,
+        mip_level: u32,
+        base_array_layer: u32,
+    ) -> BufferImageCopy {
         BufferImageCopy::default()
             .buffer_offset(self.start_position as u64)
             .image_subresource(
                 ImageSubresourceLayers::default()
                     .aspect_mask(aspect_mask)
                     .mip_level(mip_level)
-                    .base_array_layer(0)
+                    .base_array_layer(base_array_layer)
                     .layer_count(1),
             )
             .image_extent(self.extent)
@@ -255,6 +260,25 @@ impl RawImageLevelInfo {
         let pixel_count = self.extent.height * self.extent.width;
 
         pixel_count * utils::get_format_size(format)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RawImageLevelInfo {
+    pub layers: Vec<RawImageArrayInfo>,
+}
+
+impl RawImageLevelInfo {
+    pub fn size(&self, format: Format) -> u32 {
+        let mut size = 0;
+
+        for layer in &self.layers {
+            let pixel_count = layer.extent.height * layer.extent.width;
+
+            size += pixel_count * utils::get_format_size(format);
+        }
+
+        size
     }
 }
 
@@ -278,6 +302,10 @@ impl RawImageData {
         self.data.len()
     }
 
+    pub fn layer_count(&self) -> usize {
+        self.level_infos[0].layers.len()
+    }
+
     pub fn level_count(&self) -> usize {
         self.level_infos.len()
     }
@@ -292,7 +320,9 @@ impl RawImageData {
         let mut res = Vec::new();
 
         for (mip_level, level_info) in self.level_infos.iter().enumerate() {
-            res.push(level_info.buffer_copy(aspect_mask, mip_level as u32));
+            for (layer, layer_info) in level_info.layers.iter().enumerate() {
+                res.push(layer_info.buffer_copy(aspect_mask, mip_level as u32, layer as u32));
+            }
         }
 
         res
@@ -305,12 +335,14 @@ impl From<RgbaImage> for RawImageData {
             format: Format::R8G8B8A8_UNORM,
             data: value.to_vec(),
             level_infos: vec![RawImageLevelInfo {
-                extent: Extent3D {
-                    width: value.width(),
-                    height: value.height(),
-                    depth: 1,
-                },
-                start_position: 0,
+                layers: vec![RawImageArrayInfo {
+                    extent: Extent3D {
+                        width: value.width(),
+                        height: value.height(),
+                        depth: 1,
+                    },
+                    start_position: 0,
+                }],
             }],
         }
     }
@@ -322,12 +354,14 @@ impl From<RgbImage> for RawImageData {
             format: Format::R8G8B8_UNORM,
             data: value.to_vec(),
             level_infos: vec![RawImageLevelInfo {
-                extent: Extent3D {
-                    width: value.width(),
-                    height: value.height(),
-                    depth: 1,
-                },
-                start_position: 0,
+                layers: vec![RawImageArrayInfo {
+                    extent: Extent3D {
+                        width: value.width(),
+                        height: value.height(),
+                        depth: 1,
+                    },
+                    start_position: 0,
+                }],
             }],
         }
     }

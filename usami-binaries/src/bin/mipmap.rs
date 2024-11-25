@@ -116,12 +116,13 @@ fn main() -> VkResult<()> {
     let gradient_readback_raw_buffer = gradient_readback_buffer.device_memory.read_to_vec()?;
 
     for (index, level) in gradient_raw_image.level_infos.iter().enumerate() {
+        let layer0 = &level.layers[0];
         image::save_buffer_with_format(
             format!("output_{index}.png"),
-            &gradient_readback_raw_buffer[level.start_position
-                ..level.start_position + level.size(gradient_raw_image.format) as usize],
-            level.extent.width,
-            level.extent.height,
+            &gradient_readback_raw_buffer[layer0.start_position
+                ..layer0.start_position + layer0.size(gradient_raw_image.format) as usize],
+            layer0.extent.width,
+            layer0.extent.height,
             image::ColorType::Rgba8,
             image::ImageFormat::Png,
         )

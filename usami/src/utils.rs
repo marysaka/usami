@@ -11,7 +11,7 @@ use ash::{
 use image::{EncodableLayout, ImageBuffer, RgbaImage};
 
 use crate::{
-    image::{RawImageData, RawImageLevelInfo},
+    image::{RawImageArrayInfo, RawImageData, RawImageLevelInfo},
     UsamiBuffer, UsamiCommandBuffer, UsamiCommandPool, UsamiDevice, UsamiImage,
 };
 
@@ -108,15 +108,41 @@ pub fn create_gradient_image_with_mip_levels(
         let level_height = std::cmp::max(height >> level, 1);
 
         level_infos.push(RawImageLevelInfo {
+            layers: vec![RawImageArrayInfo {
+                extent: Extent3D {
+                    width: level_width,
+                    height: level_height,
+                    depth: 1,
+                },
+                start_position: data.len(),
+            }],
+        });
+        data.extend_from_slice(create_gradient_image_rgba(level_width, level_height).as_bytes());
+    }
+
+    RawImageData::new(Format::R8G8B8A8_UNORM, data, level_infos)
+}
+
+pub fn create_gradient_image_with_layers(width: u32, height: u32, layers: u32) -> RawImageData {
+    let mut data = Vec::new();
+    let mut layers_info = Vec::new();
+
+    for _ in 0..layers {
+        layers_info.push(RawImageArrayInfo {
             extent: Extent3D {
-                width: level_width,
-                height: level_height,
+                width,
+                height,
                 depth: 1,
             },
             start_position: data.len(),
         });
-        data.extend_from_slice(create_gradient_image_rgba(level_width, level_height).as_bytes());
+
+        data.extend_from_slice(create_gradient_image_rgba(width, height).as_bytes());
     }
+
+    let level_infos = vec![RawImageLevelInfo {
+        layers: layers_info,
+    }];
 
     RawImageData::new(Format::R8G8B8A8_UNORM, data, level_infos)
 }
