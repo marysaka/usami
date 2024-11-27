@@ -10,17 +10,6 @@ from coop_matrix_defs import (
 )
 
 
-def lea_hi(a, b, c, shift):
-    if shift == 0:
-        high = 0
-    else:
-        high = a >> (32 - shift)
-
-    high = high | c << shift
-
-    return high + b
-
-
 RZ = 0
 mat_store_addr = 0
 
@@ -58,6 +47,36 @@ def compute_16x8x16_target_by_lane_id(
     return (row, col)
 
 
+def compute_16x8x32_target_by_lane_id(
+    lane_id: int, idx: int, short_usage: str, is_colmn_major: bool
+) -> Tuple[int, int]:
+    group_id = lane_id >> 2
+    thread_id_in_group = lane_id % 4
+    row = 0
+    col = 0
+
+    if short_usage == "use_a":
+        if (idx >= 0 and idx < 4) or (idx >= 8 and idx < 12):
+            row = group_id
+        else:
+            row = group_id + 8
+
+        col = thread_id_in_group * 4 + (idx & 0x3)
+
+        if idx >= 8:
+            col += 16
+    elif short_usage == "use_b":
+        col = group_id
+        row = thread_id_in_group * 4 + (idx & 0x3)
+        if idx >= 4:
+            row += 16
+    else:
+        raise Exception("BROKEN")
+
+    print((row, col))
+    return (row, col)
+
+
 def compute_mat_offset_new(
     stride: int,
     element: int,
@@ -74,15 +93,22 @@ def compute_mat_offset_new(
     target_row = 0
     target_col = 0
 
-    if matrix_layout_name in ["16x8x8", "16x8x16", "16x16x16"] and vk_type in ["FLOAT16", "FLOAT32"]:
+    if matrix_layout_name in ["16x8x8", "16x8x16", "16x16x16"] and vk_type in [
+        "FLOAT16",
+        "FLOAT32",
+    ]:
         (target_row, target_col) = compute_16x8x16_target_by_lane_id(
             lane_id, hw_idx % 4, short_usage
         )
+        target_col += (hw_idx // 4) * 8
+    elif matrix_layout_name in ["16x8x32"] and vk_type in ["UINT8", "SINT8"]:
+        (target_row, target_col) = compute_16x8x32_target_by_lane_id(
+            lane_id, hw_idx % 16, short_usage, is_colmn_major
+        )
+        # XXX: Matrix bigger than 16x8x32
+        # target_col += (hw_idx // 8) * 16
     else:
         raise Exception(f"Unknown matrix layout {matrix_layout_name} with {vk_type}")
-
-    # Adjust for bigger mats
-    target_col += (hw_idx // 4) * 8
 
     if is_colmn_major:
         major_offset = target_col * stride
@@ -316,79 +342,6 @@ def compute_row_major_mat8x8_offset_f16_emulated(
     return exec_shader(stride, element, lane_id, user_data)
 
 
-def compute_row_major_mat8x8_offset_u32(
-    stride: int, element: int, lane_id: int
-) -> List[int]:
-    res = list()
-
-    R4 = stride
-
-    # SHF.R.U32.HI R1, RZ, 0x2, R6 ;
-    R1 = lane_id >> 0x2
-
-    # LOP3.LUT R6, R6, 0x3, RZ, 0xc0, !PT ;
-    R6 = lane_id & 0x3
-
-    # @P1 IMAD.SHL.U32 R0, R4, 0x4, RZ ;
-    R0 = R4 * 4
-
-    # IMAD R7, R1, R0, RZ ;
-    R7 = R1 * R0 + RZ
-
-    # IMAD R7, R6, 0x8, R7 ;
-    R7 = R6 * 0x8 + R7
-
-    # @P0 SHF.L.U32 R0, R2, 0x2, RZ ;
-    R0 = element * 4
-
-    # IADD3 R0, P0, P1, R7, c[0x0][0x30], R0 ;
-    R0 = R7 + mat_store_addr + R0
-
-    # STG.E.64.STRONG.CTA [R0], R2 ;
-    res.append(R0)
-    res.append(R0 + 4)
-
-    return res
-
-
-def compute_column_major_mat8x8_offset_u32(
-    stride: int, element: int, lane_id: int
-) -> List[int]:
-    res = list()
-
-    R2 = element
-    R4 = stride
-
-    # IMAD.SHL.U32 R8, R6.reuse, 0x2, RZ ;
-    R8 = lane_id * 0x2 + RZ
-
-    # LOP3.LUT R6, R6, 0xfffffffc, RZ, 0xc0, !PT ;
-    R6 = lane_id & 0xFFFFFFFC
-
-    # LOP3.LUT R8, R8, 0x6, RZ, 0xe2, !PT ;
-    R8 = R8 & 0x6
-
-    # @P1 SHF.L.U32 R7, R4, 0x2, RZ ;
-    R7 = R4 * 4
-
-    # IMAD R9, R8, R7, R6 ;
-    R9 = R8 * R7 + R6
-
-    # @P0 IMAD.SHL.U32 R0, R2, 0x4, RZ ;
-    R0 = R2 * 0x4 + RZ
-
-    # IADD3 R0, P0, P1, R9, c[0x0][0x30], R0 ;
-    R0 = R9 + mat_store_addr + R0
-
-    # IADD3 R2, P0, R7, R0, RZ ;
-    R2 = R7 + R0 + RZ
-
-    res.append(R0)
-    res.append(R2)
-
-    return res
-
-
 VERBOSE_LOG = True
 
 
@@ -407,9 +360,13 @@ def test_variant(
     success = True
 
     if is_col_major:
-        print(f"{column}x{row} (Column Major, {short_usage}, {vk_type}, {matrix_layout_name})")
+        print(
+            f"{column}x{row} (Column Major, {short_usage}, {vk_type}, {matrix_layout_name})"
+        )
     else:
-        print(f"{row}x{column} (Row Major, {short_usage}, {vk_type}, {matrix_layout_name})")
+        print(
+            f"{row}x{column} (Row Major, {short_usage}, {vk_type}, {matrix_layout_name})"
+        )
 
     expected_mat_val_count = (column * row) // 32
 
@@ -584,62 +541,12 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 SUPPORTED_CFG_DEBUG = [
     {
         "m_size": 16,
-        "n_size": 16,
-        "k_size": 16,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT16",
-        "result_type": "FLOAT16",
-        "saturating_accumulation": 0,
-    },
-    {
-        "m_size": 16,
         "n_size": 8,
-        "k_size": 16,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT16",
-        "result_type": "FLOAT16",
-        "saturating_accumulation": 0,
-    },
-    {
-        "m_size": 16,
-        "n_size": 8,
-        "k_size": 8,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT16",
-        "result_type": "FLOAT16",
-        "saturating_accumulation": 0,
-    },
-    {
-        "m_size": 16,
-        "n_size": 16,
-        "k_size": 16,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT32",
-        "result_type": "FLOAT32",
-        "saturating_accumulation": 0,
-    },
-    {
-        "m_size": 16,
-        "n_size": 8,
-        "k_size": 16,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT32",
-        "result_type": "FLOAT32",
-        "saturating_accumulation": 0,
-    },
-    {
-        "m_size": 16,
-        "n_size": 8,
-        "k_size": 8,
-        "a_type": "FLOAT16",
-        "b_type": "FLOAT16",
-        "c_type": "FLOAT32",
-        "result_type": "FLOAT32",
+        "k_size": 32,
+        "a_type": "UINT8",
+        "b_type": "UINT8",
+        "c_type": "UINT32",
+        "result_type": "UINT32",
         "saturating_accumulation": 0,
     },
 ]

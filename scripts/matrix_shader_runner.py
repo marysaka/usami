@@ -214,18 +214,18 @@ def do_ldg(ctx: "EmulatorContext", info: InstrInfo):
 
     if "128" in info.flags:
         load_size = 128
-    elif "64" in info.flags:
+    if "64" in info.flags:
         load_size = 64
     if "16" in info.flags:
         load_size = 16
-    if "8" in info.flags:
+    if "U8" in info.flags:
         load_size = 8
 
-    element_size = min(load_size, 32)
+    element_size = max(load_size, 32)
     src0 = ctx.read_from_src(info.args[1])
 
-    for element_idx in range(load_size // 32):
-        tmp = ctx.global_read_callback(src0 + element_idx * 4, element_size)
+    for element_idx in range(element_size // 32):
+        tmp = ctx.global_read_callback(src0 + element_idx * 4, load_size)
         ctx.set_dst(info.args[0], tmp, element_idx * 4)
 
 
@@ -234,21 +234,21 @@ def do_stg(ctx: "EmulatorContext", info: InstrInfo):
 
     if "128" in info.flags:
         store_size = 128
-    elif "64" in info.flags:
+    if "64" in info.flags:
         store_size = 64
     if "16" in info.flags:
         store_size = 16
-    if "8" in info.flags:
+    if "U8" in info.flags:
         store_size = 8
 
-    element_size = min(store_size, 32)
+    element_size = max(store_size, 32)
     src0 = ctx.read_from_src(info.args[0])
 
     orig_src1 = parse_src_text(info.args[1])
 
-    for element_idx in range(store_size // 32):
-        src1 = ctx.read_from_src_info(orig_src1, 0, element_size)
-        ctx.global_write_callback(src0 + element_idx * 4, src1, element_size)
+    for element_idx in range(element_size // 32):
+        src1 = ctx.read_from_src_info(orig_src1, 0, store_size)
+        ctx.global_write_callback(src0 + element_idx * 4, src1, store_size)
         orig_src1["value"] = orig_src1["value"] + 1
 
 
