@@ -217,8 +217,10 @@ def exec_shader(
     lane_id: int,
     user_data: Tuple[Path, int],
 ) -> List[int]:
-    (shader_path, expected_element_size) = user_data
-    res = list()
+    (shader_path, expected_mat_val_count, expected_element_size) = user_data
+    #print(f"Running shader {shader_path}")
+
+    res = dict()
 
     # print(f"loading shader {shader_path}")
     info = parse_assembly_from_file(shader_path)
@@ -310,18 +312,21 @@ def exec_shader(
         byte_element_size = element_size // 8
         base_offset = address % 0x100000
 
-        if not is_float_value_valid(value, expected_element_size):
-            print(
-                "WARN: Impossible values reported on write! Is the interpreter drunk?"
-            )
-            print((hex(value), expected_element_size))
-            print(shader_path)
+        val_count = byte_element_size // expected_element_size
 
-        for i in range(byte_element_size // expected_element_size):
-            offset = base_offset + i * expected_element_size
-            res.append(offset)
+        for i in range(val_count):
+            element_offset_byte = i * expected_element_size
+            element_val_shift = element_offset_byte * 8
+            element_val_mask = (1 << (expected_element_size * 8)) - 1
 
-        # print(f"write_global_value: 0x{address:x} = 0x{value:x} (size: {element_size})")
+            extracted_val = (value >> element_val_shift) & element_val_mask
+
+            offset = base_offset + element_offset_byte
+            res[extracted_val] = offset
+
+        #print(
+        #    f"write_global_value: 0x{address:x} = 0x{value:x} (size: {element_size}, {expected_element_size})"
+        #)
         pass
 
     ctx = EmulatorContext(
@@ -333,7 +338,16 @@ def exec_shader(
     )
     ctx.run(0, False)
 
-    return res
+    rearanged_res = list()
+
+    for i in range(1, 64):
+        val = res.get(i)
+        if not val:
+            break
+
+        rearanged_res.append(val)
+
+    return rearanged_res
 
 
 def compute_row_major_mat8x8_offset_f16_emulated(
@@ -453,6 +467,7 @@ def add_shader_test(
             print("MOVM in use, ignoring")
             return
 
+    expected_mat_val_count = (col * row) // 32
     # (row, col, vk_type, is_col_major, short_usage, matrix_layout_name, user_data, orig_func)
     new_entry = (
         row,
@@ -461,7 +476,7 @@ def add_shader_test(
         is_col_major,
         short_usage,
         matrix_layout_name,
-        (full_path, byte_size),
+        (full_path, expected_mat_val_count, byte_size),
         exec_shader,
     )
 

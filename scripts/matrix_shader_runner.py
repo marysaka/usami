@@ -249,7 +249,69 @@ def do_stg(ctx: "EmulatorContext", info: InstrInfo):
     for element_idx in range(element_size // 32):
         src1 = ctx.read_from_src_info(orig_src1, 0, store_size)
         ctx.global_write_callback(src0 + element_idx * 4, src1, store_size)
-        orig_src1["value"] = orig_src1["value"] + 1
+
+        if orig_src1["value"] != 255:
+            orig_src1["value"] = orig_src1["value"] + 1
+
+
+def do_ldl(ctx: "EmulatorContext", info: InstrInfo):
+    load_size = 32
+
+    if "128" in info.flags:
+        load_size = 128
+    if "64" in info.flags:
+        load_size = 64
+    if "16" in info.flags:
+        load_size = 16
+    if "U8" in info.flags:
+        load_size = 8
+
+    element_size = max(load_size, 32)
+    src0 = ctx.read_from_src(info.args[1])
+
+    for element_idx in range(element_size // 32):
+        entry_size = min(element_size, 32)
+
+        read_mask = (1 << load_size) - 1
+
+        tmp = bytearray(b'\0' * (entry_size // 8))
+        for i in range(0, entry_size // 8):
+            tmp[i] = ctx.scratch_space[src0 + i]
+
+        value = int.from_bytes(tmp, byteorder='little')
+        ctx.set_dst(info.args[0], value, element_idx * 4)
+        src0 += 4
+
+
+def do_stl(ctx: "EmulatorContext", info: InstrInfo):
+    store_size = 32
+
+    if "128" in info.flags:
+        store_size = 128
+    if "64" in info.flags:
+        store_size = 64
+    if "16" in info.flags:
+        store_size = 16
+    if "U8" in info.flags:
+        store_size = 8
+
+    element_size_max32 = max(store_size, 32)
+    element_size_min32 = min(store_size, 32)
+    src0 = ctx.read_from_src(info.args[0])
+
+    orig_src1 = parse_src_text(info.args[1])
+
+    for element_idx in range(element_size_max32 // 32):
+        store_mask = (1 << store_size) - 1
+        src1: int = ctx.read_from_src_info(orig_src1, 0, store_size) & store_mask
+        raw_value = src1.to_bytes(store_size // 8, byteorder='little')
+
+        for i in range(0, element_size_min32 // 8):
+            ctx.scratch_space[src0 + i] = raw_value[i]
+
+        src0 += 4
+        if orig_src1["value"] != 255:
+            orig_src1["value"] = orig_src1["value"] + 1
 
 
 def lop3_lut(x: int, y: int, z: int, lut: int) -> int:
@@ -396,6 +458,8 @@ INSTRS_LUT = {
     "EXIT": do_exit,
     "LDG": do_ldg,
     "STG": do_stg,
+    "LDL": do_ldl,
+    "STL": do_stl,
     "LOP3": do_lop3,
     "PRMT": do_prmt,
     "SHF": do_shf,
@@ -430,6 +494,9 @@ def parse_common_param_text(param_text: str) -> Optional[Dict[str, object]]:
 
 def parse_src_text(src_text: str) -> Optional[Dict[str, object]]:
     res = parse_common_param_text(src_text)
+
+    if src_text[0] == "[" and src_text[-1] == "]":
+        src_text = src_text[1:-1]
 
     if res:
         return res
@@ -467,8 +534,10 @@ class EmulatorContext(object):
     spr_read_callback: Optional[Any]
     global_read_callback: Optional[Any]
     global_write_callback: Optional[Any]
+
     # XXX: shared read/write callback
     # XXX: local read/write callback (Do we care? if not we only need the size here)
+    scratch_space: bytearray
 
     def __init__(
         self,
@@ -477,6 +546,7 @@ class EmulatorContext(object):
         spr_read_callback: Optional[Any] = None,
         global_read_callback: Optional[Any] = None,
         global_write_callback: Optional[Any] = None,
+        scratch_size: int = 65536,
     ) -> None:
         self.shader_code = shader_code
         self.cbuf_read_callback = cbuf_read_callback
@@ -488,6 +558,7 @@ class EmulatorContext(object):
         self.ip = 0
         self.running = False
         self.debug = False
+        self.scratch_space = bytearray(b'\0' * scratch_size)
 
     def read_gpr(self, idx: int) -> int:
         if idx == 255:
@@ -556,7 +627,7 @@ class EmulatorContext(object):
 
     def set_dst(self, dst_text, value: int, offset: int = 0, element_size: int = 32):
         if self.debug:
-            print(f"{dst_text} = 0x{value:x}")
+            print(f"{dst_text} + {offset // 4} = 0x{value:x}")
 
         return self.set_dst_from_info(
             parse_dst_text(dst_text), value, offset, element_size
