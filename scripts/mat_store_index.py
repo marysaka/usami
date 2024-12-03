@@ -70,10 +70,16 @@ def compute_16x8x32_target_by_lane_id(
         row = thread_id_in_group * 4 + (idx & 0x3)
         if idx >= 4:
             row += 16
+    elif short_usage == "use_c":
+        # NOTE: Only 32-bit
+        if idx == 0 or idx == 1:
+            row = group_id
+        elif idx == 2 or idx == 3:
+            row = group_id + 8
+        col = thread_id_in_group * 2 + (idx & 1)
     else:
         raise Exception("BROKEN")
 
-    print((row, col))
     return (row, col)
 
 
@@ -101,7 +107,7 @@ def compute_mat_offset_new(
             lane_id, hw_idx % 4, short_usage
         )
         target_col += (hw_idx // 4) * 8
-    elif matrix_layout_name in ["16x8x32"] and vk_type in ["UINT8", "SINT8"]:
+    elif matrix_layout_name in ["16x8x32"] and vk_type in ["UINT8", "SINT8", "UINT32", "SINT32"]:
         (target_row, target_col) = compute_16x8x32_target_by_lane_id(
             lane_id, hw_idx % 16, short_usage, is_colmn_major
         )
