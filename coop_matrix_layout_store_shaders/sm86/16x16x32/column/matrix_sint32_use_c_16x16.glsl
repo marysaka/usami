@@ -29,7 +29,12 @@ void main()
 {
    uint element = customElement.element[0];
    uint stride = customStride.stride[0];
-   coopmatType mat = coopmatType(1.0);
+   coopmatType mat = coopmatType(elementType(0));
+
+   for (int i = 0; i < mat.length(); i++)
+   {
+      mat[i] = elementType(i + 1);
+   }
 
    barrier();
 
