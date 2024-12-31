@@ -383,12 +383,16 @@ def exec_shader(
 
             extracted_val = (value >> element_val_shift) & element_val_mask
 
+            # Ignore invalid values
+            if extracted_val == 0:
+                continue
+
             offset = base_offset + element_offset_byte
             res[extracted_val] = offset
 
-        #print(
+        # print(
         #    f"write_global_value: 0x{address:x} = 0x{value:x} (size: {element_size}, {expected_element_size})"
-        #)
+        # )
         pass
 
     ctx = EmulatorContext(
@@ -402,11 +406,13 @@ def exec_shader(
 
     rearanged_res = list()
 
-    for i in range(1, 64):
-        val = res.get(i)
-        if not val:
-            break
+    possible_keys = list()
+    for key in res.keys():
+        possible_keys.append(key)
+    possible_keys.sort()
 
+    for key in possible_keys:
+        val = res.get(key)
         rearanged_res.append(val)
 
     return rearanged_res
