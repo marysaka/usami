@@ -20,30 +20,7 @@ HW_MATRIX_88 = 8 * 8
 THREAD_COUNT = 32
 
 
-def compute_16x8x8_target_by_lane_id(
-    lane_id: int, idx: int, short_usage: str
-) -> Tuple[int, int]:
-    group_id = lane_id >> 2
-    thread_id_in_group = lane_id % 4
-    row = 0
-    col = 0
-
-    if short_usage == "use_a" or short_usage == "use_c":
-        if idx == 0 or idx == 1:
-            row = group_id
-        elif idx == 2 or idx == 3:
-            row = group_id + 8
-        col = thread_id_in_group * 2 + (idx & 1)
-    elif short_usage == "use_b":
-        # XXX: NVIDIA document the reverse of this (Check HMMA flags)
-        row = group_id
-        col = thread_id_in_group * 2 + (idx & 1)
-    else:
-        raise Exception("BROKEN")
-
-    return (row, col)
-
-
+# 16x8x8 and 16x8x16 follow the same layout mostly
 def compute_16x8x16_target_by_lane_id(
     lane_id: int, idx: int, short_usage: str
 ) -> Tuple[int, int]:
@@ -59,12 +36,11 @@ def compute_16x8x16_target_by_lane_id(
             row = group_id + 8
         col = thread_id_in_group * 2 + (idx & 1)
     elif short_usage == "use_b":
-        # XXX: NVIDIA document something else here?! (Check HMMA flags)
-        col = thread_id_in_group * 2 + (idx & 1)
-        row = group_id
-
+        row = thread_id_in_group * 2 + (idx & 1)
         if idx >= 2:
             row += 8
+
+        col = group_id
     else:
         raise Exception("BROKEN")
 
@@ -165,14 +141,7 @@ def compute_mat_offset_new(
     target_row = 0
     target_col = 0
 
-    if matrix_layout_name in ["16x8x8"] and vk_type in [
-        "FLOAT16",
-        "FLOAT32",
-    ]:
-        (target_row, target_col) = compute_16x8x8_target_by_lane_id(
-            lane_id, hw_idx % 4, short_usage
-        )
-    elif matrix_layout_name in ["16x8x16", "16x16x16"] and vk_type in [
+    if matrix_layout_name in ["16x8x8", "16x8x16", "16x16x16"] and vk_type in [
         "FLOAT16",
         "FLOAT32",
     ]:
@@ -649,8 +618,8 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 # for entry in SUPPORTED_CFGS_SM75:
 #    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
 
-for entry in SUPPORTED_CFGS_SM86:
-    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
+# for entry in SUPPORTED_CFGS_SM86:
+#    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
 
 SUPPORTED_CFG_DEBUG = [
     {
