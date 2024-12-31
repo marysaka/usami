@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, Optional, Tuple
-
+import numpy as np
 
 U32_MAX_VALUE = 0xFFFFFFFF
 
@@ -245,13 +245,18 @@ def do_stg(ctx: "EmulatorContext", info: InstrInfo):
     src0 = ctx.read_from_src(info.args[0])
 
     orig_src1 = parse_src_text(info.args[1])
+    store_performed = False
 
     for element_idx in range(element_size // 32):
         src1 = ctx.read_from_src_info(orig_src1, 0, store_size)
         ctx.global_write_callback(src0 + element_idx * 4, src1, store_size)
+        store_performed = True
 
         if orig_src1["value"] != 255:
             orig_src1["value"] = orig_src1["value"] + 1
+
+    if not store_performed:
+        raise Exception("STG FAILED")
 
 
 def do_ldl(ctx: "EmulatorContext", info: InstrInfo):
@@ -274,11 +279,11 @@ def do_ldl(ctx: "EmulatorContext", info: InstrInfo):
 
         read_mask = (1 << load_size) - 1
 
-        tmp = bytearray(b'\0' * (entry_size // 8))
+        tmp = bytearray(b"\0" * (entry_size // 8))
         for i in range(0, entry_size // 8):
             tmp[i] = ctx.scratch_space[src0 + i]
 
-        value = int.from_bytes(tmp, byteorder='little')
+        value = int.from_bytes(tmp, byteorder="little")
         ctx.set_dst(info.args[0], value, element_idx * 4)
         src0 += 4
 
@@ -304,7 +309,7 @@ def do_stl(ctx: "EmulatorContext", info: InstrInfo):
     for element_idx in range(element_size_max32 // 32):
         store_mask = (1 << store_size) - 1
         src1: int = ctx.read_from_src_info(orig_src1, 0, store_size) & store_mask
-        raw_value = src1.to_bytes(store_size // 8, byteorder='little')
+        raw_value = src1.to_bytes(store_size // 8, byteorder="little")
 
         for i in range(0, element_size_min32 // 8):
             ctx.scratch_space[src0 + i] = raw_value[i]
@@ -443,8 +448,24 @@ def do_movm(ctx: "EmulatorContext", info: InstrInfo):
     # FIXME: Invalid but will do for now
     src0 = ctx.read_from_src(info.args[1])
     ctx.set_dst(info.args[0], src0)
-    #print(info.raw)
+    # print(info.raw)
     pass
+
+
+def do_i2f(ctx: "EmulatorContext", info: InstrInfo):
+    is_fp16 = "F16" in info.flags
+    src0 = ctx.read_from_src(info.args[1])
+
+    if is_fp16:
+        raw_val = np.float16(src0).tobytes()
+    else:
+        print(info.raw)
+        raw_val = float(src0).to_bytes()
+
+    raw_val = int.from_bytes(raw_val, byteorder="little")
+    ctx.set_dst(info.args[0], raw_val)
+    pass
+
 
 INSTRS_LUT = {
     "IMAD": do_imad,
@@ -465,6 +486,7 @@ INSTRS_LUT = {
     "SHF": do_shf,
     "LEA": do_lea,
     "MOVM": do_movm,
+    "I2F": do_i2f,
 }
 
 
@@ -558,7 +580,7 @@ class EmulatorContext(object):
         self.ip = 0
         self.running = False
         self.debug = False
-        self.scratch_space = bytearray(b'\0' * scratch_size)
+        self.scratch_space = bytearray(b"\0" * scratch_size)
 
     def read_gpr(self, idx: int) -> int:
         if idx == 255:
