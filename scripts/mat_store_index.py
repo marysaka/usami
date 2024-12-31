@@ -83,6 +83,48 @@ def compute_16x8x32_target_by_lane_id(
     return (row, col)
 
 
+def compute_16x16x32_target_by_lane_id(
+    lane_id: int, idx: int, short_usage: str, is_colmn_major: bool
+) -> Tuple[int, int]:
+    group_id = lane_id >> 2
+    thread_id_in_group = lane_id % 4
+    row = 0
+    col = 0
+
+    if short_usage == "use_a":
+        if (idx >= 0 and idx < 4) or (idx >= 8 and idx < 12):
+            row = group_id
+        else:
+            row = group_id + 8
+
+        col = thread_id_in_group * 4 + (idx & 0x3)
+
+        if idx >= 8:
+            col += 16
+    elif short_usage == "use_b":
+        if (idx >= 0 and idx < 4) or (idx >= 8 and idx < 12):
+            col = group_id
+        else:
+            col = group_id + 8
+
+        row = thread_id_in_group * 4 + (idx & 0x3)
+        if idx >= 8:
+            row += 16
+    elif short_usage == "use_c":
+        # NOTE: Only 32-bit
+        idx_per_mat = idx % 4
+        if idx_per_mat == 0 or idx_per_mat == 1:
+            row = group_id
+        elif idx_per_mat == 2 or idx_per_mat == 3:
+            row = group_id + 8
+
+        col = thread_id_in_group * 2 + (idx & 1) + (idx // 4) * 8
+    else:
+        raise Exception("BROKEN")
+
+    return (row, col)
+
+
 def compute_mat_offset_new(
     stride: int,
     element: int,
@@ -107,12 +149,26 @@ def compute_mat_offset_new(
             lane_id, hw_idx % 4, short_usage
         )
         target_col += (hw_idx // 4) * 8
-    elif matrix_layout_name in ["16x8x32"] and vk_type in ["UINT8", "SINT8", "UINT32", "SINT32"]:
+    elif matrix_layout_name in ["16x8x32"] and vk_type in [
+        "UINT8",
+        "SINT8",
+        "UINT32",
+        "SINT32",
+    ]:
         (target_row, target_col) = compute_16x8x32_target_by_lane_id(
             lane_id, hw_idx % 16, short_usage, is_colmn_major
         )
         # XXX: Matrix bigger than 16x8x32
         # target_col += (hw_idx // 8) * 16
+    elif matrix_layout_name in ["16x16x32"] and vk_type in [
+        "UINT8",
+        "SINT8",
+        "UINT32",
+        "SINT32",
+    ]:
+        (target_row, target_col) = compute_16x16x32_target_by_lane_id(
+            lane_id, hw_idx % 16, short_usage, is_colmn_major
+        )
     else:
         raise Exception(f"Unknown matrix layout {matrix_layout_name} with {vk_type}")
 
@@ -562,7 +618,7 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 SUPPORTED_CFG_DEBUG = [
     {
         "m_size": 16,
-        "n_size": 8,
+        "n_size": 16,
         "k_size": 32,
         "a_type": "UINT8",
         "b_type": "UINT8",
