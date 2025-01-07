@@ -615,24 +615,13 @@ def append_shader_tests(output_directory: Path, entry: Dict[str, object]):
 
 
 # XXX: Need work
-# for entry in SUPPORTED_CFGS_SM75:
-#    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
+for entry in SUPPORTED_CFGS_SM75:
+   append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm75"), entry)
 
 # for entry in SUPPORTED_CFGS_SM86:
 #    append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
 
-SUPPORTED_CFG_DEBUG = [
-    {
-        "m_size": 16,
-        "n_size": 16,
-        "k_size": 32,
-        "a_type": "UINT8",
-        "b_type": "UINT8",
-        "c_type": "UINT32",
-        "result_type": "UINT32",
-        "saturating_accumulation": 0,
-    },
-]
+SUPPORTED_CFG_DEBUG = []
 
 for entry in SUPPORTED_CFG_DEBUG:
     append_shader_tests(Path("./coop_matrix_layout_store_shaders/sm86"), entry)
