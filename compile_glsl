@@ -19,8 +19,11 @@ KIYAMA_DEVICE_ID=9634
 KIYAMA_SM_VERSION=SM86
 
 DOLLY_IP=dolly
-DOLLY_DEVICE_ID=10370
-DOLLY_SM_VERSION=SM89
+DOLLY_DEVICE_ID_SM89=10370
+DOLLY_DEVICE_ID_SM86=9350
+DOLLY_DEVICE_ID_SM75=7944
+DOLLY_DEVICE_ID=$DOLLY_DEVICE_ID_SM75
+DOLLY_SM_VERSION=SM75
 
 
 IP=$SATEN_IP
@@ -31,9 +34,9 @@ SM_VERSION=$SATEN_SM_VERSION
 #DEVICE_ID=$KIYAMA_DEVICE_ID
 #SM_VERSION=$KIYAMA_SM_VERSION
 
-#IP=$DOLLY_IP
-#DEVICE_ID=$DOLLY_DEVICE_ID
-#SM_VERSION=$DOLLY_SM_VERSION
+IP=$DOLLY_IP
+DEVICE_ID=$DOLLY_DEVICE_ID
+SM_VERSION=$DOLLY_SM_VERSION
 
 python3 scripts/compile_shader.py --debug --host $IP --device-id $DEVICE_ID $shader_output_dir $glsl_path
 nvdisasm -hex -b $SM_VERSION $shader_output_dir/shader_data.bin | tee $shader_output_dir/shader_data.asm
@@ -42,6 +45,9 @@ hexdump -C $shader_output_dir/mesh_shader_header_gs.bin > $shader_output_dir/mes
 hexdump -C $shader_output_dir/shader_zstd_dec.bin > $shader_output_dir/shader_zstd_dec.hex
 
 if [ "$TERM_PROGRAM" = "vscode" ]; then
+if [ "$CHROME_DESKTOP" = "codium.desktop" ]; then
+  codium $shader_output_dir/shader_data.asm
+else
   code $shader_output_dir/shader_data.asm
-  true
+fi
 fi
